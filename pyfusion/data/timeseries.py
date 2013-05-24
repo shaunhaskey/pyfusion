@@ -9,6 +9,8 @@ from pyfusion.data.base import PfMetaData
 import pyfusion
 from pyfusion.orm.utils import orm_register
 
+import scipy
+
 try:
     from sqlalchemy import Table, Column, Integer, ForeignKey, Float
     from sqlalchemy.orm import mapper, relation
@@ -141,6 +143,25 @@ class TimeseriesData(BaseData):
         super(TimeseriesData, self).__init__(**kwargs)
 
 
+    def generate_frequency_series(self, NFFT, step, window='hamming'):
+        w =scipy.hamming(NFFT)
+        if len(self.signal.shape)==2:
+            signal = np.array([np.fft.rfft(w*self.signal[:,i:i+NFFT]) for i in range(0, self.signal.shape[1]-NFFT, step)])
+        else:
+            signal = np.array([np.fft.rfft(w*self.signal[i:i+NFFT]) for i in range(0, self.signal.shape[1]-NFFT, step)])
+        timebase = np.array([np.average(self.timebase[i:i+NFFT]) 
+                             for i in range(0, self.signal.shape[1]-NFFT, step)])
+
+        #This is borrowed from here:
+        #http://docs.scipy.org/doc/numpy-dev/reference/generated/numpy.fft.rfftfreq.html
+        d = (self.timebase[1] - self.timebase[0])
+        val = 1.0/(NFFT*d)
+        N = NFFT//2 + 1
+        frequency_base = np.round((np.arange(0, N, dtype=int)) * val,4)
+        return FrequencyseriesData(frequency_base = frequency_base, timebase=timebase, 
+                                   signal=signal,channels=self.channels,NFFT=NFFT, window='hamming',step=step)
+
+
 @orm_register()
 def orm_load_timeseries_data(man):
     man.tsd_table = Table('timeseriesdata', man.metadata,
@@ -149,6 +170,25 @@ def orm_load_timeseries_data(man):
     mapper(TimeseriesData, man.tsd_table, inherits=BaseData, polymorphic_identity='tsd')
 
 
+
+class FrequencyseriesData(BaseData):
+    def __init__(self, timebase = None, frequency_base = None, signal=None, channels=None, NFFT=None,window=None,step=None,**kwargs):
+        self.timebase = timebase
+        self.frequency_base = frequency_base
+        self.channels = channels
+        self.NFFT = NFFT
+        self.window = window
+        self.step = step
+        self.signal = signal
+        super(FrequencyseriesData, self).__init__(**kwargs)
+
+
+@orm_register()
+def orm_load_frequencyseries_data(man):
+    man.tsd_table = Table('frequencyseriesdata', man.metadata,
+                          Column('basedata_id', Integer, ForeignKey('basedata.basedata_id'), primary_key=True))
+    #man.metadata.create_all()
+    mapper(FrequencyseriesData, man.tsd_table, inherits=BaseData, polymorphic_identity='fsd')
 
 
 class SVDData(BaseData):

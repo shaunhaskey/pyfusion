@@ -86,8 +86,11 @@ class MDSPlusDataFetcher(BaseDataFetcher):
                return output_data
 
           else:
+               #print self.mds_path
                node = self.tree.getNode(self.mds_path)
-               if int(node.dtype) == 195:
+               #print node.dtype
+               #if int(node.dtype) == 195:
+               if (int(node.dtype) == 195) or (int(node.dtype) == 192):#Shaun hack to work with PMT data
                     return get_tsd_from_node(self, node)
                else:
                     raise Exception('Unsupported MDSplus node type')

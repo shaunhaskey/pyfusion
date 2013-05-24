@@ -6,6 +6,9 @@ from datetime import datetime
 import copy
 from numpy import searchsorted, arange, mean, resize, repeat, fft, conjugate, linalg, array, zeros_like, take, argmin, pi, cumsum
 from numpy import correlate as numpy_correlate
+import numpy as np
+#from pyfusion.data.timeseries import Signal
+#from pyfusion.data.base import PfMetaData
 try:
     from scipy import signal as sp_signal
 except:
@@ -84,7 +87,13 @@ def segment(input_data, n_samples, overlap=1.0):
                 pyfusion.logger.warning("Data filter 'segment' not applied to item in dataset")
         return output_dataset
     output_data = DataSet('segmented_%s, %d samples, %.3f overlap' %(datetime.now(), n_samples, overlap))
-    for el in arange(0,len(input_data.timebase), n_samples/overlap):
+
+    #SH : 24May2013 fixed bug here - before, the index was allowed to go past 
+    #the length of samples, gives smalled length data towards the end - fixed to finish the
+    #last time we can get n_samples length
+
+    #for el in arange(0,len(input_data.timebase), n_samples/overlap):
+    for el in arange(0,len(input_data.timebase) - n_samples, n_samples/overlap):
         if input_data.signal.ndim == 1:
             tmp_data = TimeseriesData(timebase=input_data.timebase[el:el+n_samples],
                                       signal=input_data.signal[el:el+n_samples],
@@ -292,3 +301,35 @@ def sp_filter_butterworth_bandpass(input_data, passband, stopband, max_passband_
 def correlate(input_data, index_1, index_2, **kwargs):
     return numpy_correlate(input_data.signal[index_1],
                            input_data.signal[index_2], **kwargs)
+
+
+@register("TimeseriesData", "DataSet")
+def change_time_base(input_data, new_time_base):
+    '''New from SH....
+    '''
+    from pyfusion.data.base import DataSet
+    from pyfusion.data.timeseries import Signal, Timebase
+    if isinstance(input_data, DataSet):
+        #output_dataset = input_data.copy()
+        #output_dataset.clear()
+        output_dataset = DataSet(input_data.label+'_new_time_base')
+        for data in input_data:
+            try:
+                output_dataset.append(data.change_time_base(new_time_base))
+            except AttributeError:
+                pyfusion.logger.warning("Data filter 'change_time_base' not applied to item in dataset")
+        return output_dataset
+
+    #cut the signal and timebase matrices to the correct size
+    new_data = copy.deepcopy(input_data)
+    n_channels = input_data.signal.shape[0]
+    new_data.signal = Signal(np.zeros((n_channels,new_time_base.shape[0]),dtype=np.float32))
+    new_data.timebase = Timebase(new_time_base) 
+    for i in range(input_data.signal.shape[0]):
+        new_data.signal[i,:] = np.interp(new_time_base, input_data.timebase, input_data.signal[i,:])
+
+    #if input_data.signal.ndim == 1:
+    #    input_data.signal = input_data.signal[new_time_args[0]:new_time_args[1]]
+    #else:
+    #    input_data.signal = input_data.signal[:,new_time_args[0]:new_time_args[1]]
+    return new_data
