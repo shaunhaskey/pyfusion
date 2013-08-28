@@ -69,14 +69,16 @@ def reduce_time(input_data, new_time_range):
 
 
 @register("TimeseriesData", "DataSet")
-def segment(input_data, n_samples, overlap=1.0):
+def segment(input_data, n_samples, overlap=1.0, datalist= 0):
     """Break into segments length n_samples.
 
     Overlap of 2.0 starts a new segment halfway into previous, overlap=1 is
     no overlap.  overlap should divide into n_samples.  Probably should
     consider a nicer definition such as in pyfusion 0
+
+    if datalist = 0 returns a DataSet object otherwise, returns a OrderedDataSet object
     """
-    from pyfusion.data.base import DataSet
+    from pyfusion.data.base import DataSet, OrderedDataSet
     from pyfusion.data.timeseries import TimeseriesData
     if isinstance(input_data, DataSet):
         output_dataset = DataSet()
@@ -86,8 +88,14 @@ def segment(input_data, n_samples, overlap=1.0):
             except AttributeError:
                 pyfusion.logger.warning("Data filter 'segment' not applied to item in dataset")
         return output_dataset
-    output_data = DataSet('segmented_%s, %d samples, %.3f overlap' %(datetime.now(), n_samples, overlap))
 
+    #SH modification incase ordering is important... i.e you are doing 
+    #two processing two different arrays at the same time (in different Timeseries objects)
+    #and you don't want to loose the time relationship between them
+    if datalist:
+        output_data = OrderedDataSet('segmented_%s, %d samples, %.3f overlap' %(datetime.now(), n_samples, overlap))
+    else:
+        output_data = DataSet('segmented_%s, %d samples, %.3f overlap' %(datetime.now(), n_samples, overlap))
     #SH : 24May2013 fixed bug here - before, the index was allowed to go past 
     #the length of samples, gives smalled length data towards the end - fixed to finish the
     #last time we can get n_samples length
@@ -104,7 +112,10 @@ def segment(input_data, n_samples, overlap=1.0):
                                       channels=input_data.channels, bypass_length_check=True)
             
         tmp_data.meta = input_data.meta.copy()
-        output_data.add(tmp_data)
+        if datalist:
+            output_data.append(tmp_data)
+        else:
+            output_data.add(tmp_data)
     return output_data
 
 @register("DataSet")

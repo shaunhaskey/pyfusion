@@ -244,7 +244,7 @@ class FlucStruc(BaseData):
         self.signal = np.dot(np.transpose(svd_data.topos[sv_list,:]),
                            np.dot(np.diag(svd_data.svs.take(sv_list)), svd_data.chronos[sv_list,:]))
         # phase differences between nearest neighbour channels
-        self.dphase = self._get_dphase(min_dphase=min_dphase)
+        self.dphase, self.fourier_values = self._get_dphase(min_dphase=min_dphase, get_fourier_value = 1)
         self.p = np.sum(svd_data.svs.take(sv_list)**2)/svd_data.E
         self.H = svd_data.H
         self.E = svd_data.E
@@ -257,11 +257,21 @@ class FlucStruc(BaseData):
     def svs(self):
         return bin2list(self._binary_svs)
 
-    def _get_dphase(self, min_dphase = -np.pi):
+    def _get_dphase(self, min_dphase = -np.pi, get_fourier_value=0):
         """
         remap to [min_dphase, min_dphase+2pi]
+        #SRH modified 24June2013 to return the complex value also
         """
-        phases = np.array([self._get_single_channel_phase(i) for i in range(self.signal.shape[0])])
+        if get_fourier_value==0:
+            phases = np.array([self._get_single_channel_phase(i) for i in range(self.signal.shape[0])])
+        else:
+            fourier_vals = []; phases = []
+            for i in range(self.signal.shape[0]):
+                phases_tmp, fourier_vals_tmp = self._get_single_channel_phase(i, get_fourier_value = 1)
+                phases.append(phases_tmp)
+                fourier_vals.append(fourier_vals_tmp)
+            phases = np.array(phases)
+            fourier_vals = np.array(fourier_vals)
         d_phases = remap_periodic(phases[1:]-phases[:-1], min_val = min_dphase)
         #d_phase_dataset = OrderedDataSet(ordered_by="channel_1.name")
         d_phase_dataset = BaseOrderedDataSet('d_phase_%s' %datetime.now())
@@ -270,14 +280,21 @@ class FlucStruc(BaseData):
             d_phase_dataset.append(FloatDelta(self.channels[i], self.channels[i+1], d_ph))
 
         #d_phase_dataset.sort()
-        return d_phase_dataset
+        if get_fourier_value==0:
+            return d_phase_dataset
+        else:
+            return d_phase_dataset, fourier_vals
 
 
-    def _get_single_channel_phase(self, ch_id):
+    def _get_single_channel_phase(self, ch_id, get_fourier_value = 0):
+        #SRH modified 24June2013 to return the complex value also
         data_fft = np.fft.fft(self.signal[ch_id])
         d_val = data_fft[self.freq_elmt]
         phase_val = np.arctan2(d_val.real,d_val.imag)
-        return phase_val
+        if get_fourier_value == 0:
+            return phase_val
+        else:
+            return phase_val, d_val
 
 @orm_register()
 def orm_load_flucstrucs(man):

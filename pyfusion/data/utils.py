@@ -44,7 +44,11 @@ def peak_freq(signal,timebase,minfreq=0,maxfreq=1.e18):
     timebase = array(timebase)
     sig_fft = fft.fft(signal)
     sample_time = float(mean(timebase[1:]-timebase[:-1]))
-    fft_freqs = (1./sample_time)*arange(len(sig_fft)).astype(float)/(len(sig_fft)-1)
+
+    #SRH modification, frequencies seemed a little bit off because of the -1 in the denominator
+    #Here we are trusting numpy....
+    #fft_freqs = (1./sample_time)*arange(len(sig_fft)).astype(float)/(len(sig_fft)-1)
+    fft_freqs = fft.fftfreq(len(sig_fft),d=sample_time)
     # only show up to nyquist freq
     new_len = len(sig_fft)/2
     sig_fft = sig_fft[:new_len]

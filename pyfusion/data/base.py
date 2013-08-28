@@ -339,6 +339,8 @@ class BaseOrderedDataSet(object):
     __metaclass__ = MetaMethods
 
     def __init__(self, label=''):
+        #SH added this to make it more compatible with DataSet
+        self.meta = PfMetaData()
         self.created = datetime.now()
         self.label = label
         self.history = "%s > New %s" %(self.created, self.__class__.__name__)

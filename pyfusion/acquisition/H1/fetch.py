@@ -62,8 +62,8 @@ class H1DataFetcher(MDSPlusDataFetcher):
                 #imain2 = self.tree.getNode(imain2_path)
                 #isec2 = self.tree.getNode(isec2_path)
                 return imain2, isec2, float(isec2/imain2)
-            except None:
-                return None
+            except:
+                return None, None, None
         
 
     def get_heating_freq(self):
@@ -84,5 +84,7 @@ class H1DataFetcher(MDSPlusDataFetcher):
             heating_freq = self.h1data_tree.getNode(heating_freq_log).data()
             return heating_freq
         except MDSplus.TreeException:
-            print 'heating frequency not available'
+            #print 'heating frequency not available'
+            return None
+        except MDSplus.TdiException:
             return None
