@@ -147,6 +147,34 @@ def database_of_scans(keyname):
         start_time = 0.004
         time_bounds = [0, 0.09]
 
+    elif keyname=='scan_4.5MHz_16Oct':
+        start_shot = 80689
+        #end_shot = 80791
+        end_shot = 80724
+        shot_list=range(start_shot,end_shot+1)
+        shot_list2 = range(80761, 80795+1)
+        for i in shot_list2:shot_list.append(i)
+        shot_list=range(start_shot,end_shot+1)
+        remove_list = [80695]
+        for i in remove_list:shot_list.remove(i)
+        start_time = 0.004
+        end_time = 0.079
+        time_bounds = [0, 0.079]
+
+    elif keyname=='scan_4.5MHz_16Oct_MP':
+        #start_shot = 
+        #end_shot = 80791
+        end_shot = 80724
+        shot_list=range(start_shot,end_shot+1)
+        shot_list2 = range(80761, 80795+1)
+        for i in shot_list2:shot_list.append(i)
+        shot_list=range(start_shot,end_shot+1)
+        remove_list = [80695]
+        for i in remove_list:shot_list.remove(i)
+        start_time = 0.004
+        end_time = 0.079
+        time_bounds = [0, 0.079]
+
     ###########################################
     ######## 5MHz and 7MHz scans Nov 15/16 2012 ###########
     elif keyname=='scan_5MHz_7MHz':
@@ -163,6 +191,9 @@ def database_of_scans(keyname):
         for i in shot_list2: shot_list.append(i)
         start_time = 0.004
         end_time = 0.040
+
+    elif keyname=='aug_2013_antenna_phasing':
+        pass
     else:
         raise ValueError('SCAN NOT AVAILABLE!!!!!')
     return shot_list, start_time, end_time
@@ -186,6 +217,7 @@ def return_scan_details(keynames):
     16Aug2012FreqScan
     All_Shots
     Test
+    aug_2013_antenna_phasing
     '''
     shot_list_overall = []; start_time_overall = []; end_time_overall = []
     if keynames.__class__==str:

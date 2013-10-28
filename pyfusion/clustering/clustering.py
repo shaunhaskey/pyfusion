@@ -147,7 +147,7 @@ def compare_several_clusters(clusters, pub_fig = 0, alpha = 0.05,decimation=10, 
     if (n_plots - (nrows * ncols))>0.01: nrows+=1
     print n_plots, ncols, nrows
     print clusters
-    fig, ax = pt.subplots(ncols=ncols,nrows=nrows, sharex = 1, sharey = 1)
+    fig, ax = pt.subplots(ncols=ncols,nrows=nrows, sharex = True, sharey = True)
     ax = ax.flatten()
     if pub_fig:
         fig.set_figwidth(8.48*cm_to_inch)
@@ -231,8 +231,8 @@ def compare_two_cluster_results(cluster1, cluster2):
     else:
         n_rows = n_clusters/n_cols
     #n_rows = 4; n_cols = 4
-    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = 1, sharey=1); ax = ax.flatten()
-    fig2, ax2 = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = 1, sharey=1); ax2 = ax2.flatten()
+    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey = True); ax = ax.flatten()
+    fig2, ax2 = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey = True); ax2 = ax2.flatten()
     for i,cluster,best_match in zip(range(len(clusters1)),clusters1,best_match_for_c1):
         current_items1 = cluster1.cluster_assignments==cluster
         current_items2 = cluster2.cluster_assignments==best_match
@@ -378,7 +378,7 @@ class clustering_object():
         freq_plot_item = 'freq'
         cluster_list = list(set(self.cluster_assignments))
         n_clusters = len(cluster_list)
-        fig_kh, ax_kh = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig_kh, ax_kh = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         misc_data_dict = self.feature_obj.misc_data_dict
         if color_by_cumul_phase:
             instance_array2 = modtwopi(self.feature_obj.instance_array, offset=0)
@@ -415,7 +415,7 @@ class clustering_object():
         freq_plot_item = 'freq'
         cluster_list = list(set(self.cluster_assignments))
         n_clusters = len(cluster_list)
-        fig_kh, ax_kh = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig_kh, ax_kh = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         misc_data_dict = self.feature_obj.misc_data_dict
         if color_by_cumul_phase:
             instance_array2 = modtwopi(self.feature_obj.instance_array, offset=0)
@@ -454,7 +454,7 @@ class clustering_object():
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         cluster_list = list(set(self.cluster_assignments))
         n_clusters = np.max([len(cluster_list),np.max(cluster_list)])
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         delta = 300
         x = np.linspace(-np.pi, np.pi, delta)
         instance_array = self.feature_obj.instance_array
@@ -517,7 +517,7 @@ class clustering_object():
             mpl.rcParams['savefig.dpi']=300
         if specific_dimensions == None:
             specific_dimensions = range(instance_array.shape[1])
-        fig, ax = make_grid_subplots(len(specific_dimensions), sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
         if pub_fig:
             fig.set_figwidth(8.48*cm_to_inch)
             fig.set_figheight(8.48*0.8*cm_to_inch)
@@ -607,7 +607,7 @@ class clustering_object():
             mpl.rcParams['savefig.dpi']=300
         if specific_dimensions == None:
             specific_dimensions = range(instance_array_amps.shape[1])
-        fig, ax = make_grid_subplots(len(specific_dimensions), sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
         if pub_fig:
             fig.set_figwidth(8.48*cm_to_inch)
             fig.set_figheight(8.48*0.8*cm_to_inch)
@@ -713,7 +713,7 @@ class clustering_object():
         else:
             dims = compare_dimensions
         n_dimensions = instance_array.shape[1]
-        fig_kh, ax_kh = make_grid_subplots(len(dims), sharex=1, sharey=1)
+        fig_kh, ax_kh = make_grid_subplots(len(dims), sharex = True, sharey = True)
         if pub_fig:
             fig_kh.set_figwidth(8.48*cm_to_inch)
             fig_kh.set_figheight(8.48*0.8*cm_to_inch)
@@ -752,7 +752,7 @@ class clustering_object():
         cluster_list = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
@@ -774,7 +774,7 @@ class clustering_object():
         cluster_list = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
@@ -795,7 +795,7 @@ class clustering_object():
         cluster_list = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
@@ -819,9 +819,9 @@ class clustering_object():
         cluster_list = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for i in ax: i.set_rasterization_zorder(1)
-        if plot_phases : fig_phase, ax_phase = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        if plot_phases : fig_phase, ax_phase = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         passed = True; i=1; ne_omega_data = []
         misc_data_dict = self.feature_obj.misc_data_dict
         #strange way to determine the number of channels we have.... need to figureout a better way
@@ -861,7 +861,7 @@ class clustering_object():
         fig.canvas.draw(); fig.show()
         return fig, ax
 
-    def plot_single_kh(self, cluster_list = None,kappa_cutoff=None,color_by_cumul_phase = 1, sqrtne=None, plot_alfven_lines=1,xlim=None,ylim=None,pub_fig = 0, filename = None, marker_size = 100):
+    def plot_single_kh(self, cluster_list = None,kappa_cutoff=None,color_by_cumul_phase = 1, sqrtne=None, plot_alfven_lines=1,xlim=None,ylim=None,pub_fig = 0, filename = None, marker_size = 100, alpha = 0.05, linewidth='1'):
         '''plot kh vs frequency for each cluster - i.e looking for whale tails
         The colouring of the points is based on the total phase along the array
         i.e a 1D indication of the clusters
@@ -933,12 +933,12 @@ class clustering_object():
             if np.sum(current_items)>10:
                 if color_by_cumul_phase == 1:
                     print 'hello instance', cluster
-                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data, s=marker_size, c=total_phase[current_items], vmin = min_lim, vmax = max_lim, marker='o', cmap='jet', norm=None, alpha=0.05)
+                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data, s=marker_size, c=total_phase[current_items], vmin = min_lim, vmax = max_lim, marker='o', cmap='jet', norm=None, alpha=alpha, linewidth=linewidth)
                 elif color_by_cumul_phase ==0:
-                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data,s=marker_size, c=colour_list[i], marker=marker_list[i], cmap=None, norm=None, alpha=0.05,zorder=0,rasterized=True)
+                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data,s=marker_size, c=colour_list[i], marker=marker_list[i], cmap=None, norm=None, alpha=alpha,zorder=0,rasterized=True, linewidth=linewidth)
                     print 'hello, no instance', cluster
                 elif color_by_cumul_phase == 2:
-                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data,s=marker_size, c='k', marker='o', cmap=None, norm=None, alpha=0.05,zorder=0,rasterized=True)
+                    ax[0].scatter((misc_data_dict[kh_plot_item][current_items]), scatter_data,s=marker_size, c='k', marker='o', cmap=None, norm=None, alpha=alpha,zorder=0,rasterized=True, linewidth=linewidth)
                     print 'hello, no instance', cluster
         if plot_alfven_lines:
             plot_alfven_lines_func(ax[0])
@@ -966,7 +966,7 @@ class clustering_object():
         cluster_list = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for cluster in cluster_list:
             cluster_phases = means[cluster][:]
             cumulative_phase = [0]
@@ -1019,7 +1019,7 @@ class clustering_object():
         tmp1 = np.sum(self.cluster_details['zij'],axis=1)
         print 'best prob: {best_prob:.3f}, worst_prob: {worst_prob:.3f}, max row sum: {max_row:.2f}, min row sum: {min_row:.2f}'.format(best_prob = np.max(tmp), worst_prob=np.min(tmp), max_row=np.max(tmp1), min_row=np.min(tmp1))
         n_clusters = len(list(set(self.cluster_assignments)))
-        fig, ax = make_grid_subplots(n_clusters, sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         for i in list(set(self.cluster_assignments)):
             curr_probs = tmp[self.cluster_assignments==i]
             print 'cluster {clust}, min prob {min:.2f}, max prob {max:.2f}, mean prob {mean:.2f}, std dev {std:.2f}'.format(clust = i, min = np.min(curr_probs), max = np.max(curr_probs), mean = np.mean(curr_probs), std= np.std(curr_probs))
@@ -1091,19 +1091,43 @@ class clusterer_wrapper(clustering_object):
         self.settings['method']=method
         #self.cluster_details['header']='testing'
 
+def normalise_covariances(cov_mat, geom = True):
+    n_i, n_j = cov_mat.shape
+    normalised_covariance = cov_mat.copy()
+    for i in range(n_i):
+        for j in range(n_j):
+            if geom:
+                normalised_covariance[i, j] = np.abs(cov_mat[i,j])/np.sqrt(cov_mat[i,j]**2 + cov_mat[i,i]**2 + cov_mat[j,j]**2)
+            else:
+                normalised_covariance[i, j] = np.abs(cov_mat[i,j])/(np.abs(cov_mat[i,j]) + np.abs(cov_mat[i,i]) + np.abs(cov_mat[j,j]))
+
+    return normalised_covariance
+
+def pearson_covariances(cov_mat):
+    n_i, n_j = cov_mat.shape
+    pearson_covariance = cov_mat.copy()
+    for i in range(n_i):
+        for j in range(n_j):
+            pearson_covariance[i, j] = cov_mat[i,j]/np.sqrt(cov_mat[i,i]*cov_mat[j,j])
+    return pearson_covariance
+
 ###############################################################
-def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None):
-    fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex=1, sharey=1)
+def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None, cmap = 'jet', pearson=False):
+    fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex = True, sharey = True)
     im = []
     for i in range(gmm_covars_tmp.shape[0]):
-        im.append(ax[i].imshow(np.abs(gmm_covars_tmp[i,:,:]),aspect='auto', interpolation='nearest'))
+        if pearson:
+            cur_covar = np.abs(pearson_covariances(gmm_covars_tmp[i,:,:]))
+        else:
+            cur_covar = np.abs(gmm_covars_tmp[i,:,:])
+        im.append(ax[i].imshow(cur_covar,aspect='auto', interpolation='nearest', cmap=cmap))
         print im[-1].get_clim()
         if clim==None:
             im[-1].set_clim([0, im[-1].get_clim()[1]*0.5])
         else:
             im[-1].set_clim(clim)
     if individual!=None:
-        fig_ind,ax_ind = pt.subplots(nrows=len(individual),sharex=1,sharey=1)
+        fig_ind,ax_ind = pt.subplots(nrows=len(individual),sharex = True,sharey = True)
         if fig_name!=None:
             cm_to_inch=0.393701
             import matplotlib as mpl
@@ -1119,9 +1143,16 @@ def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None):
 
         if len(individual)==1:ax_ind = [ax_ind]
         for i,clust in enumerate(individual):
-            im = ax_ind[i].imshow(np.abs(gmm_covars_tmp[clust,:,:]),aspect='auto', interpolation='nearest')
+            if pearson:
+                cur_covar = np.abs(pearson_covariances(gmm_covars_tmp[clust,:,:]))
+            else:
+                cur_covar = np.abs(gmm_covars_tmp[clust,:,:])
+            im = ax_ind[i].imshow(cur_covar,aspect='auto', interpolation='nearest', cmap=cmap)
             cbar = pt.colorbar(im,ax=ax_ind[i])
-            cbar.set_label('covariance')
+            if pearson:
+                cbar.set_label('| PCC |')
+            else:
+                cbar.set_label('covariance')
             im.set_clim(clim)
             ax_ind[i].set_ylabel('Channel')
         ax_ind[-1].set_xlabel('Channel')
@@ -1152,7 +1183,7 @@ def EM_GMM_clustering(instance_array, n_clusters=9, sin_cos = 0, number_of_start
     LL = np.sum(gmm.score(input_data))
     gmm_covars_tmp = np.array(gmm._get_covars())
     if show_covariances:
-        fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex=1, sharey=1)
+        fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex = True, sharey = True)
         im = []
         for i in range(gmm_covars_tmp.shape[0]):
             im.append(ax[i].imshow(np.abs(gmm_covars_tmp[i,:,:]),aspect='auto'))
@@ -2198,6 +2229,102 @@ def test_von_mises_fits():
     ax[1].plot(mu_record,mu_record,'-')
     fig.canvas.draw(); fig.show()
 
+def generate_artificial_covar_data(n_clusters, n_dimensions, n_instances, prob=None, means=None, variances=None, covars=None, random_means_bounds = [-np.pi,np.pi], random_var_bounds = [0.0,0.02], random_covar_bounds = [0.0,0.1]):
+    
+    if prob==None:
+        prob = np.ones((n_clusters,),dtype=float)*1./(n_clusters)
+        print prob
+    elif np.abs(np.sum(prob)-1)>0.001:
+        raise ValueError('cluster probabilities dont add up to one within 0.001 tolerance....')
+    n_instances_per_clust = np.array(map(int, (np.array(prob)*n_instances)))
+    input_data = np.zeros((n_instances, n_dimensions),dtype=float)
+    cluster_assignments = np.zeros((n_instances,),dtype=int)
+
+    start_point = 0; end_point = 0
+    #for i_ind in range(cur_covar.shape)
+    if means==None:
+        means = np.random.rand(n_clusters,n_dimensions)*(random_means_bounds[1]-random_means_bounds[0]) + random_means_bounds[0]
+
+    covar_list = []
+    variance_list = []
+    #random entries, replace diagonals, make symmetric
+    if covars==None:
+        for i in range(n_clusters):
+            covars = np.random.rand(n_dimensions, n_dimensions)*(random_covar_bounds[1]-random_covar_bounds[0]) + random_covar_bounds[0]
+            covar_list.append(covars)
+
+    if variances==None:
+        variances = np.random.rand(n_clusters, n_dimensions)*(random_var_bounds[1]-random_var_bounds[0]) + random_var_bounds[0]
+        for i in range(variances.shape[0]):
+            np.fill_diagonal(covar_list[i], variances[i,:])
+
+    for cur_covar in covar_list:
+        for i in range(n_dimensions):
+            for j in range(i+1,n_dimensions):
+                cur_covar[j,i] = +cur_covar[i,j]
+
+    #Make the covariance matrix definitive positive by making the diagonal
+    #elements greater than the sum of the absolute values on each row
+    #http://math.stackexchange.com/questions/332456/how-to-make-a-matrix-positive-semidefinite
+    for index1 in range(len(covar_list)):
+        covar = covar_list[index1]
+        try:
+            np.linalg.cholesky(covar)
+        except np.linalg.LinAlgError:
+            for i in range(covar.shape[0]):
+                covar[i,i] = (np.sum(np.abs(covar[i,:])) - covar[i,i])*1.1
+                variances[index1,i] = +covar[i,i]
+            print 'problem'
+            np.linalg.cholesky(covar)
+
+
+    fig, ax = pt.subplots(nrows = 4, ncols=4); ax = ax.flatten()
+    for loc, i in enumerate(covar_list): 
+        im = ax[loc].imshow(np.abs(i), interpolation = 'nearest', cmap='binary')
+        im.set_clim([0,0.2])
+    fig.canvas.draw(); fig.show()
+
+    fig, ax = pt.subplots(nrows = 4, ncols=4); ax = ax.flatten()
+    for i in range(n_clusters):
+        end_point = end_point + n_instances_per_clust[i]
+        cur_mean = means[i,:]
+        cur_covar = covar_list[i]
+        np.linalg.cholesky(cur_covar)
+        tmp_instances = n_instances_per_clust[i]
+        print tmp_instances
+        tmp = np.random.multivariate_normal(cur_mean, cur_covar, int(tmp_instances))
+        input_data[start_point:end_point,:] = tmp
+        cluster_assignments[start_point:end_point] = i
+        start_point = end_point
+        print tmp.shape
+        im = ax[i].imshow(np.abs(np.cov(tmp.T)), interpolation = 'nearest', cmap='binary')
+        im.set_clim([0,.2])
+
+    fig.canvas.draw(); fig.show()
+    input_data = input_data %(2.*np.pi)    
+    input_data[input_data>np.pi] -= 2.*np.pi
+
+    #shuffle the rows of the data so they
+    #aren't in order of the clusters which might cause some problems....
+    locs = np.arange(n_instances)
+    np.random.shuffle(locs)
+    input_data = input_data[locs,:]
+    cluster_assignments = cluster_assignments[locs]
+    feat_obj = feature_object(instance_array=input_data, misc_data_dict={})#, misc_data_labels):
+    
+    #create a clustering object with all info, and put it as the first object in the
+    #clustered items list
+    tmp = clustering_object()
+    tmp.settings = {'method':'EM_VMM'}
+    tmp.cluster_assignments = cluster_assignments
+    tmp.cluster_details = {'EM_VMM_means':means,'EM_VMM_kappas':variances}
+    tmp.feature_obj = feat_obj
+    feat_obj.clustered_objects.append(tmp)
+    return feat_obj
+
+
+
+
 def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, method='vonMises', means=None, variances=None, random_means_bounds = [-np.pi,np.pi], random_var_bounds = [0.05,5]):
     '''Generate a dummy data set n_clusters : number of separate
     clusters n_dimensions : how many seperate phase signals per
@@ -2274,7 +2401,7 @@ def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, m
     feat_obj.clustered_objects.append(tmp)
     return feat_obj
 
-def make_grid_subplots(n_subplots, sharex=1, sharey=1):
+def make_grid_subplots(n_subplots, sharex = True, sharey = True):
     '''This helper function generates the many subplots
     on a regular grid
 
@@ -2285,7 +2412,7 @@ def make_grid_subplots(n_subplots, sharex=1, sharey=1):
         n_rows = n_subplots/n_cols + 1
     else:
         n_rows = n_subplots/n_cols
-    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = 1, sharey=1); ax = ax.flatten()
+    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey = True); ax = ax.flatten()
     #fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols,subplot_kw=dict(projection='polar')); ax = ax.flatten()
     return fig, ax
 
