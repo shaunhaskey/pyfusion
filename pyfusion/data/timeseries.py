@@ -238,7 +238,6 @@ class FlucStruc(BaseData):
         # peak frequency for fluctuation structure
         self.timebase = timebase
         self.freq, self.freq_elmt = peak_freq(svd_data.chronos[sv_list[0]], self.timebase)
-
         self.t0 = timebase[0]
         # singular value filtered signals
         self.signal = np.dot(np.transpose(svd_data.topos[sv_list,:]),
@@ -290,7 +289,7 @@ class FlucStruc(BaseData):
         #SRH modified 24June2013 to return the complex value also
         data_fft = np.fft.fft(self.signal[ch_id])
         d_val = data_fft[self.freq_elmt]
-        phase_val = np.arctan2(d_val.real,d_val.imag)
+        phase_val = np.arctan2(d_val.imag,d_val.real)
         if get_fourier_value == 0:
             return phase_val
         else:

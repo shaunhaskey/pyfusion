@@ -86,7 +86,13 @@ def single_shot_fluc_strucs(shot=None, array=None, other_arrays=None, other_arra
     return np.array(instance_array_list), misc_data_dict
 
 def single_shot_svd_wrapper(input_data):
-    return single_shot_fluc_strucs(*input_data)
+    try:
+        return single_shot_fluc_strucs(*input_data)
+    except Exception, e:
+        print "!!!!!!!!!!!!!! EXCEPTION"
+        print input_data
+        print e
+        return [None,]
 
 def multi_svd(shot_selection,array_name, other_arrays = None, other_array_labels = None, meta_data = None,
     n_cpus=8, NFFT = 2048, power_cutoff=0.05, min_svs=2, overlap = 4,): 
@@ -369,7 +375,16 @@ def single_shot(current_shot, array_names, NFFT, hop, n_pts, lower_freq, ax, sta
 
 def single_shot_wrapper(input_data):
     #instance_array_cur, misc_data_dict_cur = single_shot(input_data[0], input_data[1], input_data[2], input_data[3], input_data[4], input_data[5], input_data[6], input_data[7],input_data[8]) 
-    instance_array_cur, misc_data_dict_cur, kappa_array = single_shot(*input_data)
+    try:
+        instance_array_cur, misc_data_dict_cur, kappa_array = single_shot(*input_data)
+    except Exception, e:
+        print "!!!!!!!!!!!!!! EXCEPTION"
+        print input_data
+        print e
+        instance_array_cur = None
+        misc_data_dict_cur = None
+        kappa_array = None
+
     #print 'some kind of error occured'
     #instance_array_cur=None
     #misc_data_dict_cur=None

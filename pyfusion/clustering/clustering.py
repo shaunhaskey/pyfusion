@@ -76,7 +76,7 @@ def sigma_eq_sigma_bar(kappas, deg=False):
     else:
         return std_bar, std_eq
 
-def compare_several_clusters(clusters, pub_fig = 0, alpha = 0.05,decimation=10, labels=None, filename='hello.pdf', kappa_ref_cutoff=0, plot_indices = [0,1], colours = None, markers = None):
+def compare_several_clusters(clusters, pub_fig = 0, alpha = 0.05,decimation=10, labels=None, filename='hello.pdf', kappa_ref_cutoff=0, plot_indices = [0,1], colours = None, markers = None, ylabel_loc = 0):
     '''
     Clusters contains a list of clusters
     Print out a comparison between two sets of clusters
@@ -179,7 +179,7 @@ def compare_several_clusters(clusters, pub_fig = 0, alpha = 0.05,decimation=10, 
                 cur_label = test_cluster.settings['method']
             else:
                 cur_label = labels[index]
-        cur_ax.text(0,0,cur_label, horizontalalignment='center',verticalalignment='center',bbox=dict(facecolor='white', alpha=0.5))
+        cur_ax.text(0,ylabel_loc,cur_label, horizontalalignment='center',verticalalignment='center',bbox=dict(facecolor='white', alpha=0.5))
             #cur_ax.plot(cluster_means[i,0],cluster_means[i,1],colours[i]+markers[i],markersize=8)
     ax[-1].set_xlim([-np.pi,np.pi])
     ax[-1].set_ylim([-np.pi,np.pi])
@@ -659,7 +659,7 @@ class clustering_object():
 
 
 
-    def plot_phase_vs_phase(self,pub_fig = 0, filename = 'phase_vs_phase.pdf',compare_dimensions=None, kappa_ave_cutoff=0, plot_means = 0, alpha = 0.05, decimation = 1, xlabel_loc = 0, ylabel_loc = 0):
+    def plot_phase_vs_phase(self,pub_fig = 0, kappa_cutoff=None, filename = 'phase_vs_phase.pdf',compare_dimensions=None, kappa_ave_cutoff=0, plot_means = 0, alpha = 0.05, decimation = 1, xlabel_loc = 0, ylabel_loc = 0):
         '''
         SH: 9May2013
 
@@ -698,13 +698,19 @@ class clustering_object():
             instance_array[:,1::2]=np.sin(self.feature_obj.instance_array)
             pass
         else:
-            instance_array = (self.feature_obj.instance_array)%(2.*np.pi)
-            instance_array[instance_array>np.pi]-=(2.*np.pi)
+            #instance_array = (self.feature_obj.instance_array)%(2.*np.pi)
+            #instance_array[instance_array>np.pi]-=(2.*np.pi)
+            instance_array = modtwopi(self.feature_obj.instance_array)
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        # if kappa_cutoff!=None:
+        #     averages = np.average(self.cluster_details["EM_VMM_kappas"],axis=1)
+        #     cluster_list = np.arange(len(averages))[averages>kappa_cutoff]
+        # else:
+        #     cluster_list = list(set(self.cluster_assignments))
         cluster_list = list(set(self.cluster_assignments))
-        colours = ['r','k','b','y','m','r','k','b','y','m']
+        colours = ['r','k','b','y','0.6','0.3','r','k','b','y','0.6','0.3']
         colours.extend(colours)
-        marker = ['o','o','o','o','o','x','x','x','x','x','x']
+        marker = ['o','o','o','o','o','o','x','x','x','x','x','x']
         marker.extend(marker)
         if compare_dimensions ==None:
             dims = []
@@ -712,6 +718,8 @@ class clustering_object():
                 dims.append([dim, dim+1])
         else:
             dims = compare_dimensions
+        
+
         n_dimensions = instance_array.shape[1]
         fig_kh, ax_kh = make_grid_subplots(len(dims), sharex = True, sharey = True)
         if pub_fig:
@@ -728,7 +736,7 @@ class clustering_object():
                     if plot_means: ax_kh[ax_loc].plot(cluster_means[i,dim1],cluster_means[i,dim2],colours[i]+marker[i],markersize=8)
                     counter+=1
             ax_kh[ax_loc].text(xlabel_loc,ylabel_loc,r'$\Delta \psi_{}$, vs $\Delta \psi_{}$'.format(dim1+1,dim2+1), horizontalalignment='center',verticalalignment='center',bbox=dict(facecolor='white',alpha=0.5))
-
+        print('number plotted:{}'.format(counter))
         fig_kh.text(0.5, 0.01, r'$\Delta \psi$', ha='center', va='center', fontsize = 9)
         fig_kh.text(0.01, 0.5, r'$\Delta \psi$', ha='center', va='center', rotation='vertical', fontsize=9)
         ax_kh[-1].set_xlim([-np.pi,np.pi])
@@ -756,8 +764,9 @@ class clustering_object():
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
-                tmp = self.feature_obj.instance_array[current_items,:]%(2.*np.pi)
-                tmp[tmp>np.pi]-=(2.*np.pi)
+                #tmp = self.feature_obj.instance_array[current_items,:]%(2.*np.pi)
+                #tmp[tmp>np.pi]-=(2.*np.pi)
+                tmp = modtwopi(self.feature_obj.instance_array[current_items,:])
                 ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
                 ax[cluster].legend(loc='best')
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
@@ -923,6 +932,7 @@ class clustering_object():
             print 'hello'
             colour_list.extend(colour_list)
             marker_list.extend(marker_list)
+        print cluster_list
         for i,cluster in enumerate(cluster_list):
             current_items = self.cluster_assignments==cluster
             if sqrtne==None:
@@ -1033,19 +1043,19 @@ class clusterer_wrapper(clustering_object):
 
     method : k-means, EMM_GMM, k_means_periodic, EM_VMM
     pass settings as kwargs: these are the default settings:
-    'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':1,'use_scikit':1}
+    'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':None,'use_scikit':1}
     'EM_GMM' : {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30},
     'k_means_periodic' : {'n_clusters':9, 'number_of_starts':10, 'n_cpus':1, 'distance_calc':'euclidean','convergence_diff_cutoff': 0.2, 'iterations': 40, 'decimal_roundoff':2},
     'EM_VMM' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'k_means',
                 'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
-                'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1}}
+                'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1, 'seeds':None}}
     'EM_GMM2' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'k_means',
                 'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
                 'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1}}
 
     SH: 6May2013
     '''
-    def __init__(self, feature_obj, method='k-means', **kwargs):
+    def __init__(self, feature_obj, method='k-means',comment='', **kwargs):
         self.feature_obj = feature_obj
         print 'kwargs', kwargs
         #Default settings are declared first, which are overwritten by kwargs
@@ -1059,12 +1069,12 @@ class clusterer_wrapper(clustering_object):
         cluster_func_class = {'k_means': 'func', 'EM_GMM' : 'func',
                          'k_means_periodic' : 'func', 'EM_VMM' : 'func', 'EM_GMM2':'func', 'EM_VMM_GMM':'func'}
         
-        default_settings = {'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':1,'use_scikit':1},
+        default_settings = {'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':None,'use_scikit':1},
                             'EM_GMM' : {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30},
                             'k_means_periodic' : {'n_clusters':9, 'number_of_starts':10, 'n_cpus':1, 'distance_calc':'euclidean','convergence_diff_cutoff': 0.2, 'n_iterations': 40, 'decimal_roundoff':2},
                             'EM_VMM' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'k_means',
                                         'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
-                                        'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1},
+                                        'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1, 'seeds':None},
                             'EM_GMM2' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'k_means',
                                          'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
                                          'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1},
@@ -1089,6 +1099,7 @@ class clusterer_wrapper(clustering_object):
             tmp = cluster_func(self.feature_obj.instance_array, **self.settings)
             self.cluster_assignments, self.cluster_details = tmp.cluster_assignments, tmp.cluster_details
         self.settings['method']=method
+        self.cluster_details['comments'] = comment
         #self.cluster_details['header']='testing'
 
 def normalise_covariances(cov_mat, geom = True):
@@ -1115,9 +1126,13 @@ def pearson_covariances(cov_mat):
 def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None, cmap = 'jet', pearson=False):
     fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex = True, sharey = True)
     im = []
+    mean_PCC_vals = []
     for i in range(gmm_covars_tmp.shape[0]):
         if pearson:
             cur_covar = np.abs(pearson_covariances(gmm_covars_tmp[i,:,:]))
+            dim = gmm_covars_tmp.shape[1]
+            mean_PCC_vals.append((np.sum(np.abs(pearson_covariances(gmm_covars_tmp[i,:,:]))) - dim)/(dim*dim - dim))
+            print 'mean |PCC| : {}'.format(mean_PCC_vals[-1])
         else:
             cur_covar = np.abs(gmm_covars_tmp[i,:,:])
         im.append(ax[i].imshow(cur_covar,aspect='auto', interpolation='nearest', cmap=cmap))
@@ -1145,6 +1160,9 @@ def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None, cm
         for i,clust in enumerate(individual):
             if pearson:
                 cur_covar = np.abs(pearson_covariances(gmm_covars_tmp[clust,:,:]))
+                dim = gmm_covars_tmp.shape[1]
+                mean_PCC = (np.sum(np.abs(pearson_covariances(gmm_covars_tmp[clust,:,:]))) - dim)/(dim*dim - dim)
+                print 'mean |PCC| : {}'.format(mean_PCC)
             else:
                 cur_covar = np.abs(gmm_covars_tmp[clust,:,:])
             im = ax_ind[i].imshow(cur_covar,aspect='auto', interpolation='nearest', cmap=cmap)
@@ -1154,12 +1172,14 @@ def show_covariances(gmm_covars_tmp, clim=None,individual=None,fig_name=None, cm
             else:
                 cbar.set_label('covariance')
             im.set_clim(clim)
-            ax_ind[i].set_ylabel('Channel')
-        ax_ind[-1].set_xlabel('Channel')
+            ax_ind[i].set_ylabel('Dimension')
+        ax_ind[-1].set_xlabel('Dimension')
         if fig_name!=None:
             fig_ind.savefig(fig_name, bbox_inches='tight', pad_inches=0.01)
         fig_ind.canvas.draw();fig_ind.show()
     #for i in im : i.set_clim(clims)
+    print mean_PCC_vals
+    print np.mean(mean_PCC_vals)
     fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
     fig.canvas.draw();fig.show()
 
@@ -1205,7 +1225,7 @@ def EM_GMM_clustering(instance_array, n_clusters=9, sin_cos = 0, number_of_start
         cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'BIC':bic_value,'LL':LL}
     return cluster_assignments, cluster_details
 
-def k_means_clustering(instance_array, n_clusters=9, sin_cos = 1, number_of_starts = 30, seed=None,use_scikit=1,**kwargs):
+def k_means_clustering(instance_array, n_clusters=9, sin_cos = 1, number_of_starts = 30, seed=None, use_scikit=1,**kwargs):
     '''
     This runs the k-means clustering algorithm as implemented in scipy - change to scikit-learn?
 
@@ -1836,9 +1856,18 @@ def EM_VMM_clustering_wrapper2(input_data):
     return copy.deepcopy(tmp.cluster_assignments), copy.deepcopy(tmp.cluster_details)
 
 
-def EM_VMM_clustering_wrapper(instance_array, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1):
+def EM_VMM_clustering_wrapper(instance_array, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1, seeds = None):
     cluster_list = [n_clusters for i in range(number_of_starts)]
-    seed_list = [i for i in range(number_of_starts)]
+    if seeds == None:
+        seed_list = [None]*len(number_of_starts)
+    if (seeds.__class__ == int) and (number_of_starts==1):
+        seed_list = [seed_list]
+    if (seeds.__class__ == int) and (number_of_starts!=1):
+        raise Exception('Only one seed given for more than one start - This will give duplicate results, fix and try again!!!')
+    if len(seed_list)!=number_of_starts:
+        raise Exception('The length of the seed list is different to the number of starts - fix and try again!!!')
+
+    #seed_list = [i for i in range(number_of_starts)]
     rep = itertools.repeat
     from multiprocessing import Pool
     input_data_iter = itertools.izip(rep(instance_array), rep(n_clusters),
@@ -1890,8 +1919,10 @@ class EM_VMM_clustering_class():
         self.start = start
         self.hard_assignments = hard_assignments
         self.seed = seed
+        #If None is given as a seed, get a random number between 1 and 10000
         if self.seed == None:
-            self.seed = os.getpid()
+            self.seed=int(round(np.random.rand()*10000))+1
+            #self.seed = os.getpid()
         print('seed,',self.seed)
         np.random.seed(self.seed)
         if kappa_calc == 'lookup_table':
@@ -2342,8 +2373,8 @@ def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, m
     as this is approximately kappa
 
     SH : 14May2013 '''
-    if means!=None and variances!=None:
-        if means.shape!=variances.shape:
+    if means != None and variances != None:
+        if means.shape != variances.shape:
             raise ValueError('means and variances have different shapes')
         n_clusters, n_dimensions = means.shape
     if means!=None: n_clusters, n_dimensions = means.shape
@@ -2373,7 +2404,11 @@ def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, m
             if method=='vonMises':
                 input_data[start_point:end_point,j] = vonmises.rvs(variances[i,j],size=n_instances_per_clust[i],loc=means[i,j],scale=1)
             elif method=='Gaussian':
-                input_data[start_point:end_point,j] = norm.rvs(size=n_instances_per_clust[i],loc=means[i,j],scale=1./variances[i,j]*3)
+                #input_data[start_point:end_point,j] = norm.rvs(size=n_instances_per_clust[i],loc=means[i,j],scale=1./variances[i,j]*3)
+                sigma_converted = np.sqrt(-2*np.log(spec.iv(1,variances[i,j])/spec.iv(0,variances[i,j])))
+                print sigma_converted
+                input_data[start_point:end_point,j] = np.random.normal(size = n_instances_per_clust[i], loc = means[i,j], scale = sigma_converted)
+                #input_data[start_point:end_point,j] = norm.rvs(size=n_instances_per_clust[i],loc=means[i,j],scale=1./variances[i,j]*3)
             else:
                 raise ValueError('method must be either vonMises or Gaussian')
         cluster_assignments[start_point:end_point] = i

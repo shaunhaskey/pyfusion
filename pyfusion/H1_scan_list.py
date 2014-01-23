@@ -154,22 +154,21 @@ def database_of_scans(keyname):
         shot_list=range(start_shot,end_shot+1)
         shot_list2 = range(80761, 80795+1)
         for i in shot_list2:shot_list.append(i)
-        shot_list=range(start_shot,end_shot+1)
+        #shot_list=range(start_shot,end_shot+1)
         remove_list = [80695]
         for i in remove_list:shot_list.remove(i)
         start_time = 0.004
         end_time = 0.079
         time_bounds = [0, 0.079]
 
-    elif keyname=='scan_4.5MHz_16Oct_MP':
-        #start_shot = 
-        #end_shot = 80791
-        end_shot = 80724
+    elif keyname=='scan_7MHz_16Oct_MP':
+        start_shot = 80843
+        end_shot = 80877
         shot_list=range(start_shot,end_shot+1)
-        shot_list2 = range(80761, 80795+1)
-        for i in shot_list2:shot_list.append(i)
-        shot_list=range(start_shot,end_shot+1)
-        remove_list = [80695]
+        #hot_list2 = range(80761, 80795+1)
+        #for i in shot_list2:shot_list.append(i)
+        #shot_list=range(start_shot,end_shot+1)
+        remove_list = [80847]
         for i in remove_list:shot_list.remove(i)
         start_time = 0.004
         end_time = 0.079
