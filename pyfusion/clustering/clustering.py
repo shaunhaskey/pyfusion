@@ -1,5 +1,10 @@
 '''
-SH : 2May2013
+Shaun Haskey : 2May2013
+
+Many routines for clustering and plotting.
+
+
+
 '''
 import numpy as np
 import matplotlib.pyplot as pt
@@ -25,7 +30,7 @@ def compare_several_kappa_values(clusters, pub_fig = 0, alpha = 0.05,decimation=
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=150
+        mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight(8.48*0.8*cm_to_inch)
 
@@ -93,7 +98,7 @@ def compare_several_clusters(clusters, pub_fig = 0, alpha = 0.05,decimation=10, 
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=1.0
-        mpl.rcParams['savefig.dpi']=100
+        mpl.rcParams['savefig.dpi']=300
 
     reference_cluster = clusters[0]
     clusters1 = list(set(reference_cluster.cluster_assignments))
@@ -373,7 +378,7 @@ class clustering_object():
         SH: 9May2013
 
         '''
-        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'').replace('_','-')
         kh_plot_item = 'kh'
         freq_plot_item = 'freq'
         cluster_list = list(set(self.cluster_assignments))
@@ -526,7 +531,7 @@ class clustering_object():
             histogram_data[histogram_data>np.pi]-=(2.*np.pi)
             ax[i].hist(histogram_data,bins=180,normed=True,histtype='stepfilled',range=[-np.pi,np.pi])
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        fig.canvas.draw(); fig.show()
+        #fig.canvas.draw(); fig.show()
         if self.cluster_assignments!=None:
             cluster_list = list(set(self.cluster_assignments))
         delta = 300
@@ -575,7 +580,7 @@ class clustering_object():
             fig.tight_layout()
             fig.savefig(filename, bbox_inches='tight', pad_inches=0.01)
         ax[-1].set_xlim([-np.pi,np.pi])
-        fig.suptitle(suptitle,fontsize = 8)
+        fig.suptitle(suptitle.replace('_','\char`_'),fontsize = 8)
         fig.canvas.draw(); fig.show()
         return fig, ax
 
@@ -659,7 +664,7 @@ class clustering_object():
 
 
 
-    def plot_phase_vs_phase(self,pub_fig = 0, kappa_cutoff=None, filename = 'phase_vs_phase.pdf',compare_dimensions=None, kappa_ave_cutoff=0, plot_means = 0, alpha = 0.05, decimation = 1, xlabel_loc = 0, ylabel_loc = 0):
+    def plot_phase_vs_phase(self,pub_fig = 0, kappa_cutoff=None, filename = 'phase_vs_phase.pdf',compare_dimensions=None, kappa_ave_cutoff=0, plot_means = 0, alpha = 0.05, decimation = 1, xlabel_loc = 0, ylabel_loc = 0, combine_factor = 1):
         '''
         SH: 9May2013
 
@@ -673,7 +678,7 @@ class clustering_object():
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
             mpl.rcParams['lines.markersize']=1.0
-            mpl.rcParams['savefig.dpi']=100
+            mpl.rcParams['savefig.dpi']=300
 
         sin_cos = 0
         if (self.settings['method'] == 'EM_VMM') or (self.settings['method'] == 'EM_VMM_soft'): 
@@ -700,7 +705,7 @@ class clustering_object():
         else:
             #instance_array = (self.feature_obj.instance_array)%(2.*np.pi)
             #instance_array[instance_array>np.pi]-=(2.*np.pi)
-            instance_array = modtwopi(self.feature_obj.instance_array)
+            instance_array = modtwopi(self.feature_obj.instance_array, offset = 0)
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         # if kappa_cutoff!=None:
         #     averages = np.average(self.cluster_details["EM_VMM_kappas"],axis=1)
@@ -727,15 +732,19 @@ class clustering_object():
             fig_kh.set_figheight(8.48*0.8*cm_to_inch)
         for ax_loc,(dim1,dim2) in enumerate(dims):
             print dim1, dim2
+            dim1=dim1*combine_factor; dim2=dim2*combine_factor
+            print 'b', dim1, dim2, combine_factor
+            print dim1,dim1+combine_factor+1
             counter = 0
             for i,cluster in enumerate(cluster_list):
                 if np.average(self.cluster_details["EM_VMM_kappas"][i,:])>kappa_ave_cutoff:
                     current_items = self.cluster_assignments==cluster
                     datapoints = instance_array[current_items,:]
-                    ax_kh[ax_loc].scatter(datapoints[::decimation,dim1], datapoints[::decimation,dim2],c=colours[counter],marker=marker[counter], alpha=alpha,rasterized=True, edgecolors=colours[counter])
+                    print datapoints[::decimation,dim1:dim1+combine_factor+1].shape, np.sum(datapoints[::decimation,dim1:dim1+combine_factor+1],axis=1).shape
+                    ax_kh[ax_loc].scatter(np.sum(datapoints[::decimation,dim1:dim1+combine_factor],axis=1), np.sum(datapoints[::decimation,dim2:dim2+combine_factor],axis=1),c=colours[counter],marker=marker[counter], alpha=alpha,rasterized=True, edgecolors=colours[counter])
                     if plot_means: ax_kh[ax_loc].plot(cluster_means[i,dim1],cluster_means[i,dim2],colours[i]+marker[i],markersize=8)
                     counter+=1
-            ax_kh[ax_loc].text(xlabel_loc,ylabel_loc,r'$\Delta \psi_{}$, vs $\Delta \psi_{}$'.format(dim1+1,dim2+1), horizontalalignment='center',verticalalignment='center',bbox=dict(facecolor='white',alpha=0.5))
+            ax_kh[ax_loc].text(xlabel_loc,ylabel_loc,r'$\Delta \psi_{}$, vs $\Delta \psi_{}$'.format(dim2/combine_factor+1,dim1/combine_factor+1), horizontalalignment='center',verticalalignment='center',bbox=dict(facecolor='white',alpha=0.5))
         print('number plotted:{}'.format(counter))
         fig_kh.text(0.5, 0.01, r'$\Delta \psi$', ha='center', va='center', fontsize = 9)
         fig_kh.text(0.01, 0.5, r'$\Delta \psi$', ha='center', va='center', rotation='vertical', fontsize=9)
@@ -751,29 +760,105 @@ class clustering_object():
         fig_kh.canvas.draw(); fig_kh.show()
         return fig_kh, ax_kh
 
-    def plot_clusters_phase_lines(self,decimation=1):
+    def plot_clusters_phase_lines(self,decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None):
         '''Plot all the phase lines for the clusters
         Good clusters will show up as dense areas of line
 
         SH: 9May2013
         '''
-        cluster_list = list(set(self.cluster_assignments))
+        
+        ax_supplied = False if ax==None else True
+        cluster_list_tmp = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
-        n_clusters = len(cluster_list)
-        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        n_clusters = len(cluster_list_tmp)
+        if cluster_list==None:  cluster_list = cluster_list_tmp
+        if single_plot:
+            if not ax_supplied: fig, ax = pt.subplots(); ax = [ax]*n_clusters
+            if colours == None: colours = ['r','k','b','y','m']*10
+        else:
+            if not ax_supplied: fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+            if colours == None: colours = ['k']*n_clusters
+        if kappa_cutoff!=None:
+            averages = np.average(self.cluster_details["EM_VMM_kappas"],axis=1)
+            cluster_list = np.arange(len(averages))[averages>kappa_cutoff]
+        means = []
+        count = 0
+        axes_list = []
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
-                #tmp = self.feature_obj.instance_array[current_items,:]%(2.*np.pi)
-                #tmp[tmp>np.pi]-=(2.*np.pi)
-                tmp = modtwopi(self.feature_obj.instance_array[current_items,:])
-                ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
-                ax[cluster].legend(loc='best')
-        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        fig.suptitle(suptitle, fontsize = 8)
-        fig.canvas.draw(); fig.show()
-        return fig, ax
+                tmp = modtwopi(self.feature_obj.instance_array[current_items,:], offset = 0)
+                means.append(modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0))
+                if cumul_sum:
+                    tmp = np.cumsum(tmp,axis = 1)/(2.*np.pi)
+                    means[-1] = np.cumsum(means[-1])/(2.*np.pi)
+                plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                plot_ax.plot(tmp[::decimation,:].T,linestyle = '-',linewidth=0.05, color = colours[count], zorder = 0)
+                axes_list.append(plot_ax)
+                count+=1
+                #ax[cluster].legend(loc='best')
+        for mean, color, clust, axis in zip(means,colours, cluster_list, axes_list):
+            axis.plot(mean,linestyle = '-',linewidth=1.5, color = 'k')
+            axis.plot(mean,linestyle = '-',linewidth=1.0, color = 'r')
+            ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+            if not cumul_sum: ax[0].set_ylim([-np.pi, np.pi])
+            for i in ax:i.grid(True)
+        if not ax_supplied:
+            fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
+            fig.canvas.draw(); fig.show()
+            return fig, ax
 
+    def plot_clusters_polarisations(self, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None):
+        '''Plot all the phase lines for the clusters
+        Good clusters will show up as dense areas of line
+
+        SH: 9May2013
+        '''
+        
+        if scatter_kwargs == None: scatter_kwargs = {'s':100, 'alpha':0.05,'linewidth':'1'}
+        ax_supplied = False if ax==None else True
+        cluster_list_tmp = list(set(self.cluster_assignments))
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        n_clusters = len(cluster_list_tmp)
+        if cluster_list==None:  cluster_list = cluster_list_tmp
+        if single_plot:
+            if not ax_supplied: fig, ax = pt.subplots(); ax = [ax]*n_clusters
+            if colours == None: colours = ['r','k','b','y','m']*10
+        else:
+            if not ax_supplied: fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+            if colours == None: colours = ['k']*n_clusters
+        if kappa_cutoff!=None:
+            averages = np.average(self.cluster_details["EM_VMM_kappas"],axis=1)
+            cluster_list = np.arange(len(averages))[averages>kappa_cutoff]
+        marker_list = ['o' for i in colours]
+        means = []
+        count = 0
+        axes_list = []
+        for cluster in cluster_list:
+            current_items = self.cluster_assignments==cluster
+            if np.sum(current_items)>10:
+                tmp = np.abs(self.feature_obj.misc_data_dict['naked_coil'][current_items,:])
+                tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
+                tmp /= np.sqrt(np.sum(tmp**2, axis = 1))[:,np.newaxis]
+                plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                #plot_ax.scatter(tmp[:,1], np.sqrt(tmp[:,0]**2 + tmp[:,2]**2), c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
+                plot_ax.scatter(tmp[:,0], tmp2, c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                #plot_ax.scatter(tmp[:,1], tmp[:,0], c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
+                print np.mean(np.sum(tmp**2, axis = 1))
+                axes_list.append(plot_ax)
+                count+=1
+        ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+        #if not cumul_sum: ax[0].set_ylim([0, 1]); ax[0].set_xlim([0,1])
+        for i in ax:i.grid(True)
+        if not ax_supplied:
+            fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
+            fig.canvas.draw(); fig.show()
+            return fig, ax
+
+
+    
     def plot_clusters_amp_lines(self,decimation=1):
         '''Plot all the phase lines for the clusters
         Good clusters will show up as dense areas of line
@@ -790,6 +875,7 @@ class clustering_object():
                 #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]).T / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])).T
                 tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,1:]) / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0:-1]))
                 ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
+        for i in ax:i.grid(True)
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         fig.suptitle(suptitle, fontsize = 8)
         fig.canvas.draw(); fig.show()
@@ -870,7 +956,7 @@ class clustering_object():
         fig.canvas.draw(); fig.show()
         return fig, ax
 
-    def plot_single_kh(self, cluster_list = None,kappa_cutoff=None,color_by_cumul_phase = 1, sqrtne=None, plot_alfven_lines=1,xlim=None,ylim=None,pub_fig = 0, filename = None, marker_size = 100, alpha = 0.05, linewidth='1'):
+    def plot_single_kh(self, cluster_list = None,kappa_cutoff=None,color_by_cumul_phase = 1, sqrtne=None, plot_alfven_lines=1,xlim=None,ylim=None,pub_fig = 0, filename = None, marker_size = 100, alpha = 0.05, linewidth='1', colour_list = None):
         '''plot kh vs frequency for each cluster - i.e looking for whale tails
         The colouring of the points is based on the total phase along the array
         i.e a 1D indication of the clusters
@@ -888,8 +974,8 @@ class clustering_object():
             mpl.rcParams['axes.titlesize']=8.0#'medium'
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
-            mpl.rcParams['lines.markersize']=1.5
-            mpl.rcParams['savefig.dpi']=100
+            mpl.rcParams['lines.markersize']=0.5
+            mpl.rcParams['savefig.dpi']=300
 
         misc_data_dict = self.feature_obj.misc_data_dict
         if kappa_cutoff!=None:
@@ -923,7 +1009,7 @@ class clustering_object():
             total_phase = np.sum(instance_array2,axis=1)
             total_phase = np.clip(total_phase,min_lim, max_lim)
         plotting_offset = 0
-        colour_list = ['k','b','r','y','g','c','m','w']
+        if colour_list==None: colour_list = ['k','b','r','y','g','c','m','w']
         marker_list = ['o' for i in colour_list]
         marker_list.extend(['d' for i in colour_list])
         colour_list.extend(colour_list)
@@ -1859,7 +1945,8 @@ def EM_VMM_clustering_wrapper2(input_data):
 def EM_VMM_clustering_wrapper(instance_array, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1, seeds = None):
     cluster_list = [n_clusters for i in range(number_of_starts)]
     if seeds == None:
-        seed_list = [None]*len(number_of_starts)
+        seed_list = [int(np.random.rand()*10000) for i in range(number_of_starts)]# )[None]*number_of_starts
+        print 'seeds..........', seed_list
     if (seeds.__class__ == int) and (number_of_starts==1):
         seed_list = [seed_list]
     if (seeds.__class__ == int) and (number_of_starts!=1):

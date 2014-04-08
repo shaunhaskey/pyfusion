@@ -76,8 +76,8 @@ def single_shot_fluc_strucs(shot=None, array=None, other_arrays=None, other_arra
             #other array data
             tmp_loc = np.argmin(np.abs(misc_data_dict['freq'][-1]-frequency_base))
             for i,tmp_label in zip(other_arrays_data_fft, other_array_labels):
-                if tmp_label[0]!=None: misc_data_dict[tmp_label[0]].append(np.abs(i[:,0]))
-                if tmp_label[1]!=None: misc_data_dict[tmp_label[1]].append(np.abs(i[:,tmp_loc]))
+                if tmp_label[0]!=None: misc_data_dict[tmp_label[0]].append((i[:,0]))
+                if tmp_label[1]!=None: misc_data_dict[tmp_label[1]].append((i[:,tmp_loc]))
             phases = np.array([tmp_phase.delta for tmp_phase in fs.dphase])
             phases[np.abs(phases)<0.001]=0
             instance_array_list.append(phases)
@@ -153,7 +153,7 @@ def get_array_data(current_shot, array_name, time_window=None,new_timebase=None)
         data = data.reduce_time(time_window)
     return data
 
-def find_peaks(data_fft, n_pts=20, lower_freq = 1500,by_average=True, moving_ave=5, peak_cutoff = 0):
+def find_peaks(data_fft, n_pts=20, lower_freq = 1500, by_average=True, moving_ave=5, peak_cutoff = 0):
     time_pts, n_dims, freqs = data_fft.signal.shape
     good_indices = []
     for i in range(time_pts):
@@ -235,9 +235,9 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
     #    other_arrays_segmented.append(tmp.generate_frequency_series(NFFT,hop))
 
     if current_shot<60000:
-        get_ne_array=0; get_naked_coil = 0
+        get_ne_array = 0; get_naked_coil = 0
     else:
-        get_ne_array=0; get_naked_coil = 0
+        get_ne_array = 1; get_naked_coil = 1;
 
     if get_ne_array:
         ne_data = get_array_data(current_shot, "ElectronDensity",new_timebase = timebase)
@@ -260,7 +260,8 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
         ne_mode = np.array([None for i in mirnov_data])
         ne_static = np.array([None for i in mirnov_data])
     if get_naked_coil:
-        naked_coil_values = return_values(naked_coil_fft.signal,good_indices, force_index = 0)
+        #naked_coil_values = return_values(naked_coil_fft.signal,good_indices, force_index = 0)
+        naked_coil_values = return_values(naked_coil_fft.signal,good_indices,)
     else:
         naked_coil_values =  np.array([None for i in mirnov_data])
     time_values = return_time_values(data_fft.timebase, good_indices)
@@ -282,7 +283,10 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
     heating_values = time_values * 0 + heating_freq
 
     #Change Mirnov data to phase differences in [-pi,pi)
-    mirnov_angles = (-np.diff(mirnov_tmp_data))%(2.*np.pi)
+    #Note this used to be -np.diff, I think this was to correct for an error in pyfusion
+    #Where the real and imag parts of the phase diff were put the wrong way into arctan2
+    #SRH 24Jan2014
+    mirnov_angles = (np.diff(mirnov_tmp_data))%(2.*np.pi)
     mirnov_angles[mirnov_angles>np.pi] -= (2.*np.pi)
     print 'make misc dictionary'
     #Put everything together for the datamining step
@@ -365,7 +369,7 @@ def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None
 def single_shot(current_shot, array_names, NFFT, hop, n_pts, lower_freq, ax, start_time, end_time, perform_datamining, ave_kappa_cutoff, cutoff_by):
     mirnov_angles, misc_data_dict_cur = extract_data_by_picking_peaks(current_shot, array_names, NFFT=NFFT, hop=hop,n_pts=n_pts,lower_freq=lower_freq, ax = ax, time_window = [start_time, end_time])
     if perform_datamining:
-        z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, n_clusters = 16, n_iterations = 50)
+        z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, n_clusters = 16, n_iterations = 20)
         instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff=ave_kappa_cutoff, ax = ax, cutoff_by = cutoff_by)
         return instance_array_cur, misc_data_dict_cur, z.cluster_details['EM_VMM_kappas']
     else:
@@ -471,12 +475,16 @@ def combine_feature_sets(feat_obj1, feat_obj2):
 
     extras = np.nonzero(ticked_off==0)[0]
     print('total not replaced : {}'.format(len(extras)))
-    for i in extras:
-        feat_obj2.instance_array = np.append(feat_obj2.instance_array, (feat_obj1.instance_array[i,:])[np.newaxis,:],axis=0)
-        for j in common_keys:
-           feat_obj2.misc_data_dict[j] =  np.append(feat_obj2.misc_data_dict[j], feat_obj1.misc_data_dict[j][i])
+    misc_data_shapes = [len(feat_obj2.misc_data_dict[j].shape) for j in common_keys]
+    print misc_data_shapes
+    print common_keys
+    feat_obj2.instance_array = np.append(feat_obj2.instance_array, (feat_obj1.instance_array[extras,:]),axis=0)
 
-
+    for j,tmp_shape in zip(common_keys,misc_data_shapes):
+        if tmp_shape==1:
+            feat_obj2.misc_data_dict[j] =  np.append(feat_obj2.misc_data_dict[j], feat_obj1.misc_data_dict[j][extras])
+        elif tmp_shape==2:
+            feat_obj2.misc_data_dict[j] =  np.append(feat_obj2.misc_data_dict[j], feat_obj1.misc_data_dict[j][extras,:], axis = 0)
 
     print('Output size : {}'.format(feat_obj2.instance_array.shape))
     return feat_obj2
