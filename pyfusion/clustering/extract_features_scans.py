@@ -1,10 +1,100 @@
 import clustering as clust
 import pyfusion.H1_scan_list as H1_scan_list
-from multiprocessing import Process, Pool
+from multiprocessing import Pool
 import pyfusion as pf
-import MDSplus as MDS
 import numpy as np
-import time, os, copy, itertools
+import os, copy, itertools
+
+class single_shot_extraction():
+    def __init__(self, shot=None, array=None, other_arrays=None, other_array_labels=None, start_time=0.001, end_time = 0.08, samples=1024, power_cutoff = 0.1, n_svs = 2, overlap = 4, meta_data=None):
+        self.shot = shot
+        self.array = array
+        self.other_arrays = other_arrays
+        self.other_array_labels = other_array_labels
+        self.start_time = start_time
+        self.end_time = end_time
+        self.samples = samples
+        self.power_cutoff = power_cutoff
+        self.n_svs = n_svs
+        self.overlap = overlap
+        self.meta_data = meta_data
+        print(os.getpid(), shot)
+        self.get_data()
+        self.get_interesting()
+
+    def get_data(self,):
+        self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
+        self.data = self.data.subtract_mean(copy=False).normalise(method='v',separate=True,copy=False)
+        self.data_segmented = self.data.segment(self.samples, overlap = self.overlap, datalist = 1)
+        print self.other_arrays, self.other_array_labels
+        if self.other_arrays == None: self.other_array_labels = []
+        if self.other_arrays == None: self.other_arrays = []; 
+        if self.meta_data == None : self.meta_data = []
+
+        self.other_arrays_segmented = []
+        for i in self.other_arrays:
+            tmp = pf.getDevice('H1').acq.getdata(self.shot, i).change_time_base(self.data.timebase)
+            self.other_arrays_segmented.append(tmp.segment(self.samples, overlap = self.overlap, datalist = 1))
+        self.instance_array_list = []
+        self.misc_data_dict = {'RMS':[],'time':[], 'svs':[]}
+
+        #How to deal with the static case?
+        for i in self.other_array_labels: 
+            if i[0]!=None:  self.misc_data_dict[i[0]] = []
+            if i[1]!=None:  self.misc_data_dict[i[1]] = []
+
+        self.fs_values = ['p','a12','H','freq','E']
+        for i in self.meta_data: self.misc_data_dict[i]=[]
+        for i in self.fs_values: self.misc_data_dict[i]=[]
+
+    def get_interesting(self,):
+        for seg_loc in range(len(self.data_segmented)):
+            data_seg = self.data_segmented[seg_loc]
+            time_seg_average_time = np.mean([data_seg.timebase[0],data_seg.timebase[-1]])
+            fs_set = data_seg.flucstruc()
+
+            #Need to check my usage of rfft.... seems different to scipy.fftpack.rfft approach
+            other_arrays_data_fft = []
+            for i in self.other_arrays_segmented:
+                other_arrays_data_fft.append(np.fft.rfft(i[seg_loc].signal)/self.samples)
+                if not np.allclose(i[seg_loc].timebase,data_seg.timebase): 
+                    print "WARNING possible timebase mismatch between other array data and data!!!"
+            d = (data_seg.timebase[1] - data_seg.timebase[0])
+            val = 1.0/(self.samples*d)
+            N = self.samples//2 + 1
+            frequency_base = np.round((np.arange(0, N, dtype=int)) * val,4)
+            #get the valid flucstrucs
+            valid_fs = []
+            for fs in fs_set:
+                if (fs.p > self.power_cutoff) and (len(fs.svs()) >= self.n_svs): valid_fs.append(fs)
+            #extract the useful information from the valid flucstrucs
+            for fs in valid_fs:
+                for i in self.fs_values: self.misc_data_dict[i].append(getattr(fs,i))
+                self.misc_data_dict['svs'].append(len(fs.svs()))
+                for i in self.meta_data:
+                    try:
+                        self.misc_data_dict[i].append(copy.deepcopy(self.data.meta[i]))
+                    except KeyError:
+                        self.misc_data_dict[i].append(None)
+                self.misc_data_dict['RMS'].append((np.mean(self.data.scales**2))**0.5)
+                self.misc_data_dict['time'].append(time_seg_average_time)
+                #other array data
+                tmp_loc = np.argmin(np.abs(self.misc_data_dict['freq'][-1]-frequency_base))
+                for i,tmp_label in zip(other_arrays_data_fft, self.other_array_labels):
+                    if tmp_label[0]!=None: self.misc_data_dict[tmp_label[0]].append((i[:,0]))
+                    if tmp_label[1]!=None: self.misc_data_dict[tmp_label[1]].append((i[:,tmp_loc]))
+                phases = np.array([tmp_phase.delta for tmp_phase in fs.dphase])
+                phases[np.abs(phases)<0.001]=0
+                self.instance_array_list.append(phases)
+        #convert lists to arrays....
+        for i in self.misc_data_dict.keys():self.misc_data_dict[i]=np.array(self.misc_data_dict[i])
+        self.instance_array_list = np.array(self.instance_array_list)
+
+class for_stft(single_shot_extraction):
+    def get_interesting(self,):
+        pass
+
+
 
 def single_shot_fluc_strucs(shot=None, array=None, other_arrays=None, other_array_labels=None, start_time=0.001, end_time = 0.08, samples=1024, power_cutoff = 0.1, n_svs = 2, overlap = 4, meta_data=None):
     '''This function will extract all the important information from a
@@ -87,8 +177,12 @@ def single_shot_fluc_strucs(shot=None, array=None, other_arrays=None, other_arra
 
 def single_shot_svd_wrapper(input_data):
     try:
-        return single_shot_fluc_strucs(*input_data)
-    except Exception, e:
+        #return single_shot_fluc_strucs(*input_data)
+        tmp = single_shot_extraction(*input_data)
+        return tmp.instance_array_list.copy(), copy.deepcopy(tmp.misc_data_dict)
+        #return single_shot_extraction(*input_data)
+    #except Exception, e:
+    except None:
         print "!!!!!!!!!!!!!! EXCEPTION"
         print input_data
         print e
@@ -220,7 +314,7 @@ def return_time_values(tmp_array, good_indices):
             tmp_data = np.append(tmp_data,tmp_array[tmp_indices],axis=0)
     return tmp_data
 
-def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n_pts=20,lower_freq=1500, ax = None, time_window = [0.004,0.090]):
+def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n_pts=20,lower_freq=1500, ax = None, time_window = [0.004,0.090],):
     #Get Mirnov Data, ne_array data and naked coil data, and put them all on the same timebase
     data = get_array_data(current_shot, array_names[0], time_window = time_window)
     timebase = data.timebase
@@ -238,7 +332,8 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
         get_ne_array = 0; get_naked_coil = 0
     else:
         get_ne_array = 1; get_naked_coil = 1;
-
+        #get_ne_array = 0; get_naked_coil = 0;
+        
     if get_ne_array:
         ne_data = get_array_data(current_shot, "ElectronDensity",new_timebase = timebase)
         ne_fft = ne_data.generate_frequency_series(NFFT,hop)
@@ -367,7 +462,9 @@ def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None
     return instance_array2, misc_data_dict2
 
 def single_shot(current_shot, array_names, NFFT, hop, n_pts, lower_freq, ax, start_time, end_time, perform_datamining, ave_kappa_cutoff, cutoff_by):
+    print 'hello'
     mirnov_angles, misc_data_dict_cur = extract_data_by_picking_peaks(current_shot, array_names, NFFT=NFFT, hop=hop,n_pts=n_pts,lower_freq=lower_freq, ax = ax, time_window = [start_time, end_time])
+    print 'hello'
     if perform_datamining:
         z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, n_clusters = 16, n_iterations = 20)
         instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff=ave_kappa_cutoff, ax = ax, cutoff_by = cutoff_by)
