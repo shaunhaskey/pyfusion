@@ -766,7 +766,6 @@ class clustering_object():
 
         SH: 9May2013
         '''
-        
         ax_supplied = False if ax==None else True
         cluster_list_tmp = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
@@ -788,12 +787,16 @@ class clustering_object():
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
                 tmp = modtwopi(self.feature_obj.instance_array[current_items,:], offset = 0)
-                means.append(modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0))
+                cur_mean = modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0)
+                means.append(cur_mean)
                 if cumul_sum:
                     tmp = np.cumsum(tmp,axis = 1)/(2.*np.pi)
                     means[-1] = np.cumsum(means[-1])/(2.*np.pi)
                 plot_ax = ax[cluster] if not ax_supplied else ax[count]
-                plot_ax.plot(tmp[::decimation,:].T,linestyle = '-',linewidth=0.05, color = colours[count], zorder = 0)
+                tmp1 = tmp[::decimation,:]
+                tmp1[(tmp1 - cur_mean[np.newaxis,:]) > np.pi]-=2.*np.pi
+                tmp1[(tmp1 - cur_mean[np.newaxis,:]) < -np.pi]+=2.*np.pi
+                plot_ax.plot(tmp1.T, linestyle = '-',linewidth=0.05, color = colours[count], zorder = 0)
                 axes_list.append(plot_ax)
                 count+=1
                 #ax[cluster].legend(loc='best')
@@ -877,7 +880,7 @@ class clustering_object():
                 ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
         for i in ax:i.grid(True)
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        fig.suptitle(suptitle, fontsize = 8)
+        fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
         fig.canvas.draw(); fig.show()
         return fig, ax
 

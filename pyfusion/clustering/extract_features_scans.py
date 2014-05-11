@@ -1,12 +1,21 @@
-import clustering as clust
-import pyfusion.H1_scan_list as H1_scan_list
-from multiprocessing import Pool
-import pyfusion as pf
-import numpy as np
 import os, copy, itertools
+from multiprocessing import Pool
+
+import clustering as clust
+import numpy as np
+import serial
+import pyfusion as pf
+import pyfusion.H1_scan_list as H1_scan_list
+
 
 class single_shot_extraction():
-    def __init__(self, shot=None, array=None, other_arrays=None, other_array_labels=None, start_time=0.001, end_time = 0.08, samples=1024, power_cutoff = 0.1, n_svs = 2, overlap = 4, meta_data=None):
+    def __init__(self, shot=None, array=None, other_arrays=None, other_array_labels=None, start_time=0.001, end_time = 0.08, samples=1024, overlap = 4, meta_data=None, extraction_settings = None):
+        '''
+        Attempt to standardise the two extraction methods and allow expansion to other methods
+
+        SRH : 11May2014
+        '''
+        self.extraction_settings = {} if extraction_settings==None else extraction_settings
         self.shot = shot
         self.array = array
         self.other_arrays = other_arrays
@@ -14,13 +23,11 @@ class single_shot_extraction():
         self.start_time = start_time
         self.end_time = end_time
         self.samples = samples
-        self.power_cutoff = power_cutoff
-        self.n_svs = n_svs
         self.overlap = overlap
         self.meta_data = meta_data
         print(os.getpid(), shot)
         self.get_data()
-        self.get_interesting()
+        self.get_interesting(**self.extraction_settings)
 
     def get_data(self,):
         self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
@@ -47,7 +54,7 @@ class single_shot_extraction():
         for i in self.meta_data: self.misc_data_dict[i]=[]
         for i in self.fs_values: self.misc_data_dict[i]=[]
 
-    def get_interesting(self,):
+    def get_interesting(self,min_svs = 2, power_cutoff = 0.05):
         for seg_loc in range(len(self.data_segmented)):
             data_seg = self.data_segmented[seg_loc]
             time_seg_average_time = np.mean([data_seg.timebase[0],data_seg.timebase[-1]])
@@ -66,7 +73,7 @@ class single_shot_extraction():
             #get the valid flucstrucs
             valid_fs = []
             for fs in fs_set:
-                if (fs.p > self.power_cutoff) and (len(fs.svs()) >= self.n_svs): valid_fs.append(fs)
+                if (fs.p > power_cutoff) and (len(fs.svs()) >= min_svs): valid_fs.append(fs)
             #extract the useful information from the valid flucstrucs
             for fs in valid_fs:
                 for i in self.fs_values: self.misc_data_dict[i].append(getattr(fs,i))
@@ -91,8 +98,70 @@ class single_shot_extraction():
         self.instance_array_list = np.array(self.instance_array_list)
 
 class for_stft(single_shot_extraction):
-    def get_interesting(self,):
-        pass
+    def get_data(self,):
+        self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
+        self.data = self.data.subtract_mean(copy=False).normalise(method='v',separate=True,copy=False)
+        self.timebase = self.data.timebase
+        self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
+
+        print self.other_arrays, self.other_array_labels
+        if self.other_arrays == None: self.other_array_labels = []
+        if self.other_arrays == None: self.other_arrays = []; 
+        if self.meta_data == None : self.meta_data = []
+
+        self.other_arrays_fft = []
+        for i in self.other_arrays:
+            tmp = pf.getDevice('H1').acq.getdata(self.shot, i).change_time_base(self.data.timebase)
+            self.other_arrays_fft.append(tmp.generate_frequency_series(self.samples,self.samples/self.overlap))
+
+        self.instance_array_list = []
+        self.misc_data_dict = {}
+
+        #How to deal with the static case?
+        for i in self.other_array_labels: 
+            if i[0]!=None:  self.misc_data_dict[i[0]] = []
+            if i[1]!=None:  self.misc_data_dict[i[1]] = []
+
+        #self.fs_values = ['p','a12','H','freq','E']
+        for i in self.meta_data: self.misc_data_dict[i]=[]
+        #for i in self.fs_values: self.misc_data_dict[i]=[]
+
+    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20):
+        good_indices = find_peaks(self.data_fft, n_pts=n_pts, lower_freq = lower_freq)
+
+
+        #Use the best peaks to the get the mirnov data
+        rel_data = return_values(self.data_fft.signal,good_indices)
+        self.misc_data_dict['mirnov_data'] = +rel_data
+        rel_data_angles = np.angle(rel_data)
+
+        #Use the best peaks to get the other interesting info
+        for i,tmp_label in zip(self.other_arrays_fft, self.other_array_labels):
+            if tmp_label[0]!=None: 
+                self.misc_data_dict[tmp_label[0]] = return_values(i.signal, good_indices, force_index = 0)
+            if tmp_label[1]!=None: 
+                self.misc_data_dict[tmp_label[1]] = return_values(i.signal, good_indices)
+
+        self.misc_data_dict['time'] = return_time_values(self.data_fft.timebase, good_indices)
+        self.misc_data_dict['freq'] = return_non_freq_dependent(self.data_fft.frequency_base,good_indices)
+        #misc_data_dict['shot'] = misc_data_dict['time'] * 0 + self.shot
+        #misc_data_dict['kh'] = misc_data_dict['time'] * 0 + data.meta['kh']
+        for i in self.meta_data:
+            try:
+                if self.data.meta[i]!=None:
+                    self.misc_data_dict[i] = self.misc_data_dict['time'] * 0 + copy.deepcopy(self.data.meta[i])
+                else:
+                    self.misc_data_dict[i] = np.zeros(self.misc_data_dict['time'].shape, dtype = bool)
+            except KeyError:
+                self.misc_data_dict[i] = np.zeros(self.misc_data_dict['time'].shape, dtype = bool)
+
+        diff_angles = (np.diff(rel_data_angles))%(2.*np.pi)
+        diff_angles[diff_angles>np.pi] -= (2.*np.pi)
+        z = perform_data_datamining(diff_angles, self.misc_data_dict, n_clusters = 16, n_iterations = 20)
+        instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by)
+        self.instance_array_list = instance_array_cur
+        self.misc_data_dict = misc_data_dict_cur
+        #return instance_array_cur, misc_data_dict_cur, z.cluster_details['EM_VMM_kappas']
 
 
 
@@ -179,14 +248,85 @@ def single_shot_svd_wrapper(input_data):
     try:
         #return single_shot_fluc_strucs(*input_data)
         tmp = single_shot_extraction(*input_data)
-        return tmp.instance_array_list.copy(), copy.deepcopy(tmp.misc_data_dict)
+        return copy.deepcopy(tmp.instance_array_list), copy.deepcopy(tmp.misc_data_dict)
         #return single_shot_extraction(*input_data)
-    #except Exception, e:
-    except None:
+    except Exception, e:
         print "!!!!!!!!!!!!!! EXCEPTION"
         print input_data
         print e
         return [None,]
+
+def single_shot_stft_wrapper(input_data):
+    try:
+        tmp = for_stft(*input_data)
+        return copy.deepcopy(tmp.instance_array_list), copy.deepcopy(tmp.misc_data_dict)
+    except Exception, e:
+        print "!!!!!!!!!!!!!! EXCEPTION"
+        print input_data
+        print e
+        return [None,]
+
+
+
+def multi_extract(shot_selection,array_name, other_arrays = None, other_array_labels = None, meta_data = None,
+                  n_cpus=8, NFFT = 2048, overlap = 4, extraction_settings = None, method = 'svd'):
+    '''Runs through all the shots in shot_selection other_arrays is a
+    list of the other arrays you want to get information from '''
+
+    if extraction_settings == None:
+        if method == 'svd':
+            extraction_settings = {'power_cutoff' : 0.05, 'min_svs':  2}
+        elif method == 'stft':
+            extraction_settings = {'n_pts': 20, 'lower_freq': 1500, 'cutoff_by' : 'sigma_eq', 'filter_cutoff': 20}
+    #Get the scan details 
+    if method == 'svd':
+        wrapper = single_shot_svd_wrapper
+    elif method == 'stft':
+        wrapper = single_shot_stft_wrapper
+    else:
+        raise ValueError('method is not a valid choice : choose svd, stft')
+    shot_list, start_times, end_times = H1_scan_list.return_scan_details(shot_selection) 
+    rep = itertools.repeat
+    if other_arrays == None: other_arrays = ['ElectronDensity','H1ToroidalNakedCoil']
+    if other_array_labels == None: other_array_labels = [['ne_static','ne_mode'],[None,'naked_coil']]
+    if meta_data == None : meta_data = ['kh','heating_freq','main_current','sec_current', 'shot']
+
+    input_data_iter = itertools.izip(shot_list, rep(array_name),
+                                     rep(other_arrays),
+                                     rep(other_array_labels),
+                                     start_times, end_times,
+                                     rep(NFFT), rep(overlap),rep(meta_data), rep(extraction_settings))
+
+    #generate the shot list for each worker
+    if n_cpus>1:
+        pool_size = n_cpus
+        pool = Pool(processes=pool_size, maxtasksperchild=3)
+        print 'creating pool map'
+
+        results = pool.map(wrapper, input_data_iter)
+        print 'waiting for pool to close '
+        pool.close()
+        print 'joining pool'
+        pool.join()
+        print 'pool finished'
+    else:
+        results = map(wrapper, input_data_iter)
+    start=1
+    for i,tmp in enumerate(results):
+        print i
+        if tmp[0]!=None:
+            if start==1:
+                instance_array = copy.deepcopy(tmp[0])
+                misc_data_dict = copy.deepcopy(tmp[1])
+                start = 0
+            else:
+                instance_array = np.append(instance_array, tmp[0],axis=0)
+                for i in misc_data_dict.keys():
+                    misc_data_dict[i] = np.append(misc_data_dict[i], tmp[1][i],axis=0)
+        else:
+            print 'One shot may have failed....'
+    return clust.feature_object(instance_array = instance_array, misc_data_dict = misc_data_dict)
+
 
 def multi_svd(shot_selection,array_name, other_arrays = None, other_array_labels = None, meta_data = None,
     n_cpus=8, NFFT = 2048, power_cutoff=0.05, min_svs=2, overlap = 4,): 
