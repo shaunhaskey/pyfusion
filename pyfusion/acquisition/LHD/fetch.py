@@ -1,10 +1,17 @@
 """LHD data fetchers.
-Large chunks of code copied from Boyd, not covered by unit tests.
+This gets the data directly from the data server, and so only runs on LHD dmana
+v0: Large chunks of code copied from Boyd, not covered by unit tests.
+v1: 
+
+need:
+export Retrieve=~/retrieve/bin/  # (maybe not) 
+export INDEXSERVERNAME=DasIndex.LHD.nifs.ac.jp/LHD
+
 """
 import subprocess
 import sys
 import tempfile
-from os import path
+from os import path, makedirs
 import array as Array
 from numpy import mean, array, double, arange, dtype, load
 import numpy as np
@@ -12,21 +19,52 @@ import numpy as np
 from pyfusion.acquisition.base import BaseDataFetcher
 from pyfusion.data.timeseries import TimeseriesData, Signal, Timebase
 from pyfusion.data.base import Coords, Channel, ChannelList
+from pyfusion.debug_ import debug_
+#from pyfusion import VERBOSE, DEBUG  really want to import just pyfusion.DEBUG,VERBOSE
+import pyfusion
 
 this_dir = path.dirname(path.abspath(__file__)) 
 
-VERBOSE = 1
-data_filename = "%(diag_name)s-%(shot)d-1-%(channel_number)s"
+data_fileformat = "%(diag_name)s-%(shot)d-1-%(channel_number)s"
 
 class LHDBaseDataFetcher(BaseDataFetcher):
-    pass
+
+     def error_info(self, step=None):
+          """ can only access items that are part of self - others may be volatile
+          """
+          debug_(pyfusion.DEBUG, level=3, key='error_info',msg='enter error_info')
+          """try:
+               tree = self.tree
+          except:
+               try: 
+                    tree = self.mds_path_components['tree']
+               except:
+                    tree = "<can't determine>"
+                    debug_(DEBUG, level=1, key='error_info_cant_determine')
+
+          """
+          msg = str("MDS: Could not open %s, shot %d, channel = %s, step=%s"      
+                    %(self.diag_name, self.shot, self.channel_number, step))
+          if step == 'do_fetch':
+              pass
+          #msg += str(" using mode [%s]" % self.fetch_mode)
+
+          return(msg)
+
+     pass
 
 class LHDTimeseriesDataFetcher(LHDBaseDataFetcher):
 
     def do_fetch(self):
         # Allow for movement of Mirnov signals from A14 to PXI crate
+        if pyfusion.VERBOSE>1: print('LHDfetch - timeseries')
         chnl = int(self.channel_number)
         dggn = self.diag_name
+        # the clever "-" thing should only be used in members of multi signal diagnostics.
+        # so I moved it to base.py
+        # dggn = (self.diag_name.split('-'))[-1]  # remove -
+        debug_(pyfusion.DEBUG, level=4, key='LHD fetch debug') 
+
         if (dggn == 'FMD'):
             if (self.shot < 72380):
                 dggn = 'SX8O'
@@ -37,11 +75,11 @@ class LHDTimeseriesDataFetcher(LHDBaseDataFetcher):
         filename_dict = {'diag_name':dggn, 
                          'channel_number':chnl, 
                          'shot':self.shot}
-        self.basename = path.join(self.filepath, data_filename %filename_dict)
+        self.basename = path.join(self.filepath, data_fileformat %filename_dict)
 
         files_exist = path.exists(self.basename + ".dat") and path.exists(self.basename + ".prm")
         if not files_exist:
-            if VERBOSE>3: print('RETR: retrieving %d chn %d to %s' % 
+            if pyfusion.VERBOSE>3: print('RETR: retrieving %d chn %d to %s' % 
                               (self.shot, int(chnl),
                                self.filepath))
             tmp = retrieve_to_file(diagg_name=dggn, shot=self.shot, subshot=1, 
@@ -104,6 +142,7 @@ def fetch_data_from_file(fetcher):
     fp = open(fetcher.basename + '.dat', 'rb')
     dat_arr.fromfile(fp, bytes/bytes_per_sample)
     fp.close()
+    #print(fetcher.config_name)
 
     clockHz = None
 
@@ -121,23 +160,42 @@ def fetch_data_from_file(fetcher):
     else:  raise NotImplementedError, "timebase not recognised"
     
     ch = Channel("%s-%s" %(fetcher.diag_name, fetcher.channel_number), Coords('dummy', (0,0,0)))
-    if fetcher.gain != None: 
-        gain = fetcher.gain
-    else: 
+#    if fetcher.gain != None:   # this may have worked once...not now!
+#        gain = fetcher.gain
+#    else: 
+    #  was - crude!! if channel ==  20: arr = -arr   # (MP5 and HMP13 need flipping)
+    try:
+        gain = float(fetcher.gain)
+    except: 
         gain = 1
-    output_data = TimeseriesData(timebase=Timebase(timebase),
-                                 signal=Signal(gain*dat_arr), channels=ch)
-    output_data.meta.update({'shot':fetcher.shot})
 
+    # dodgy - should only apply to a diag in a list - don't want to define -MP5 separately - see other comment on "-"
+    #if fetcher.diag_name[0]=='-': flip = -1
+    #else: 
+    flip = 1
+
+    # not sure if this needs a factor of two for RangePolarity,Bipolar (A14)
+    scale_factor = flip*double(prm_dict['Range'][0])/(2**bits)
+    # not sure how this worked before I added array() - but has using
+    # array slowed things?  I clearly went to trouble using tailored ints above?
+    output_data = TimeseriesData(timebase=Timebase(timebase),
+                                 signal=Signal(scale_factor*gain*(array(dat_arr)-offset)),
+                                 channels=ch)
+    output_data.meta.update({'shot':fetcher.shot})
+    output_data.config_name = fetcher.config_name
     return output_data
 
 
 def read_prm_file(filename):
     """ Read a prm file into a dictionary.  Main entry point is via filename,
-    possibly reserve the option to access vai shot and subshot
+    possibly reserve the option to access via shot and subshot
     >>> pd = read_prm_file(filename=filename)
     >>> pd['Resolution(bit)']
-    ['14', '2']
+    ['12', '4']
+
+    This comes from the line
+    Aurora14,Resolution(bit),12,4
+    where (maybe?) last digit is 1: string, 4: mediumint, 5: float, 6 signed int, 7, bigint??
     """
     f = open(filename)
     prm_dict = {}
@@ -157,20 +215,50 @@ def retrieve_to_file(diagg_name=None, shot=None, subshot=None,
 
     Retrieve Usage from Oct 2009 tar file:
     Retrieve DiagName ShotNo SubShotNo ChNo [FileName] [-f FrameNo] [-h TransdServer] [-p root] [-n port] [-w|--wait [-t timeout] ] [-R|--real ]
-    """
+   """
+    from pyfusion.acquisition.LHD.LHD_utils import get_free_bytes, purge_old
+    from time import sleep
 
+# The old pyfusion used None to indicate this code could choose the location
+# in the new pyfusion, it is fixed in the config file.
+#    if outdir == None: 
+#        outdir = tempfile.gettempdir() + '/'
+
+    if not(path.exists(outdir)): makedirs(outdir)
+
+    freebytes=get_free_bytes(outdir)
+    if freebytes < 1e9:
+         purge_old(outdir, '*dat')  # ONLY DO .DAT have to manually purge prm
+         if (get_free_bytes(outdir) > freebytes*0.9):
+              print("Warning - unable to clear much space!")
+
+#
     cmd = str("retrieve %s %d %d %d %s" % (diagg_name, shot, subshot, channel, path.join(outdir, diagg_name)))
 
-    if (VERBOSE > 1): print('RETR: %s' % (cmd))
-    retr_pipe = subprocess.Popen(cmd,  shell=True, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-    (resp,err) = retr_pipe.communicate()
-    if (err != '') or (retr_pipe.returncode != 0):
+    if (pyfusion.VERBOSE > 1): print('RETR: %s' % (cmd))
+    attempt = 1
+    while(1):
+         if attempt>1: print('attempt {a}, {c}'.format(a=attempt, c=cmd))
+         retr_pipe = subprocess.Popen(cmd,  shell=True, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE)
+         (resp,err) = retr_pipe.communicate()
+         if (err != '') or (retr_pipe.returncode != 0): 
+              attempt += 1
+              print(resp,err,attempt,'.') #,
+              if attempt>10: 
+                   raise LookupError(str("Error %d accessing retrieve:"
+                                         "cmd=%s \nstdout=%s, stderr=%s" % 
+                                         (retr_pipe.poll(), cmd, resp, err)))
+              sleep(2)
+         else:
+              break
 
-        raise LookupError(str("Error %d accessing retrieve: cmd=%s\nstdout=%s, stderr=%s" % 
-                              (retr_pipe.poll(), cmd, resp, err)))
-
+    fileroot = ''
     for lin in resp.split('\n'):
-        if lin.find('parameter file')>=0:
-            fileroot = lin.split('[')[1].split('.prm')[0]
+         if pyfusion.DEBUG>3: print('*******',lin)
+         if lin.find('parameter file')>=0:
+              fileroot = lin.split('[')[1].split('.prm')[0]
+    if fileroot == '':
+         raise LookupError('parameter file not found in <<{r}>>'.format(r=resp))
+
     return(resp, err, fileroot)

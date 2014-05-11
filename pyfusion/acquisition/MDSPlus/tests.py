@@ -4,6 +4,8 @@ import os
 import pyfusion
 from pyfusion.test.tests import PfTestBase, BasePyfusionTestCase
 from pyfusion.data.base import BaseData
+from pyfusion.debug_ import debug_
+
 try:
     from pyfusion.acquisition.MDSPlus.fetch import MDSPlusBaseDataFetcher
 except:
@@ -19,9 +21,10 @@ except:
     from pyfusion.data.base import BaseData as MDSPlusBaseDataFetcher
 
 
+#this path is used to find the test tree also (in mdsplus local mode)
 TEST_DATA_PATH = os.path.abspath(os.path.dirname(__file__))
 TEST_CONFIG_FILE = os.path.join(TEST_DATA_PATH, "test.cfg")
-TEST_MDSPLUS_SERVER = 'localhost:8001'
+TEST_MDSPLUS_SERVER = 'localhost:8000'  # 8000 is the basic mdsplus port
 
 class DummyMDSData(BaseData):
     pass
@@ -98,12 +101,12 @@ class CheckMDSPlusH1Connection(PfTestBase):
         from pyfusion.acquisition.MDSPlus.acq import MDSPlusAcquisition
         h1mds = MDSPlusAcquisition(server=TEST_MDSPLUS_SERVER)
         df_str = "pyfusion.acquisition.MDSPlus.fetch.MDSPlusDataFetcher"
-        test_data = h1mds.getdata(58133,
+        test_data = h1mds.getdata(58123,
                                   data_fetcher = df_str,
                                   mds_path=r"\h1data::top.operations.mirnov:a14_14:input_1")
         from pyfusion.data.timeseries import TimeseriesData
         self.assertTrue(isinstance(test_data, TimeseriesData))
-        self.assertEqual(test_data.signal[0], -0.01953125)
+        self.assertEqual(round(test_data.signal[0],8),  -0.00732422)
 
 CheckMDSPlusH1Connection.h1 = True
 CheckMDSPlusH1Connection.mds = True
@@ -118,6 +121,8 @@ class MDSAcqTestCase(BasePyfusionTestCase):
         if pyfusion.orm_manager.IS_ACTIVE:
             pyfusion.orm_manager.Session.close_all()
             pyfusion.orm_manager.clear_mappers()
+#        print(TEST_CONFIG_FILE)
+#        pyfusion.config.read(TEST_CONFIG_FILE)
         pyfusion.conf.utils.read_config(TEST_CONFIG_FILE)
 
 
@@ -127,14 +132,15 @@ class CheckH1ConfigSection(MDSAcqTestCase):
      
     def testH1Config(self):
         import pyfusion
+#        print(pyfusion.conf.utils.diff())
         h1 = pyfusion.getDevice('H1')
-        test_mirnov = h1.acq.getdata(58133, 'H1_mirnov_array_1_coil_1')
-        self.assertEqual(test_mirnov.signal[0], -0.01953125)
+        test_mirnov = h1.acq.getdata(58123, 'H1_mirnov_array_1_coil_1')
+        self.assertEqual(round(test_mirnov.signal[0],8),  -0.00732422)
 
         
     def testH1Multichannel(self):
         import pyfusion
-        shot = 58133
+        shot = 58123
         diag = "H1_mirnov_array_1"
         #d=pyfusion.getDevice("H1")
         d=pyfusion.devices.base.Device("H1")
@@ -159,7 +165,9 @@ class TestRefactoredMDSLocal(MDSAcqTestCase):
     """
 
     def test_local_access(self):
+        # This tests access to a small test tree included in this directory
         shot = -1
+        debug_(pyfusion.DEBUG, level=3, key='local_access',msg='enter test_local_access')
         tree_path = os.path.join(TEST_DATA_PATH, 'test_tree')
         from pyfusion.acquisition.utils import get_acq_from_config
         test_acq_class = get_acq_from_config('test_local_tree')
@@ -216,7 +224,8 @@ class WebTestCase(BasePyfusionTestCase):
 class TestWebDataAcq(WebTestCase):
     def test_acq(self):
         test_device = pyfusion.getDevice("TestWebDevice")
-        test_data = test_device.acq.getdata(58063, "TestMirnovOne")
+        test_data = test_device.acq.getdata(58123, "TestMirnovOne")
+        self.assertAlmostEqual(test_data.signal[0], 0.00244184375)
 
-TestWebDataAcq.net = True
-TestWebDataAcq.dev = True
+TestWebDataAcq.net = False
+TestWebDataAcq.dev = False

@@ -9,6 +9,7 @@ from pyfusion.data.filters import filter_reg
 from pyfusion.data.plots import plot_reg
 from pyfusion.data.utils import unique_id
 import pyfusion
+import pyfusion.utils
 from pyfusion.orm.utils import orm_register
 
 
@@ -22,7 +23,13 @@ except ImportError:
     print "could not import sqlalchemy"
 
     
-
+def get_history_args_string(*args, **kwargs):
+    args_string = ', '.join(map(str,args))
+    if args_string is not '':
+        args_string += ', '
+    kwargs_string = ', '.join("%s='%s'" %(str(i[0]), str(i[1]))
+                              for i in kwargs.items())
+    return [args_string, kwargs_string]
 
 def history_reg_method(method):
     """Wrapper for filter and plot methods which updates the data history."""
@@ -30,15 +37,15 @@ def history_reg_method(method):
         do_copy = kwargs.pop('copy', True)
         if do_copy:
             original_hist = input_data.history
+            # bdb testing copy - was - reverted back takes 9 sec longer (32 cf 41)
             input_data = copy.copy(input_data)
+            #pyfusion.utils.warn('using deepcopy - bdb')
+            #input_data = copy.deepcopy(input_data)
             copy_history_string = "\n%s > (copy)" %(datetime.now())
             input_data.history = original_hist + copy_history_string
         
-        args_string = ', '.join(map(str,args))
-        if args_string is not '':
-            args_string += ', '
-        kwargs_string = ', '.join("%s='%s'" %(str(i[0]), str(i[1]))
-                                  for i in kwargs.items())
+        [args_string, kwargs_string] = get_history_args_string(*args, **kwargs)
+
         history_string = "\n%s > %s(%s%s)" %(datetime.now(), method.__name__,
                                                args_string, kwargs_string)
         input_data.history += history_string
@@ -180,6 +187,15 @@ class ChannelList(list):
             session.commit()
             session.close()
 
+            # to what extent does this duplicate time range?
+
+    def get_channel_index(self, channel_name, bounds = None):
+        for i,j in enumerate(self):
+            if j.name == channel_name:
+                return i
+        else:
+            return None
+
             
     @reconstructor
     def repopulate(self):
@@ -214,7 +230,7 @@ class BaseData(object):
     """
     __metaclass__ = MetaMethods
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.meta = PfMetaData()
         self.history = "%s > New %s" %(datetime.now(), self.__class__.__name__)
         if not hasattr(self, 'channels'):
@@ -234,7 +250,8 @@ def orm_load_basedata(man):
     man.basedata_table = Table('basedata', man.metadata,
                                Column('basedata_id', Integer, primary_key=True),
                                Column('type', String(30), nullable=False),
-                               Column('meta', PickleType(comparator=operator.eq))
+                               Column('meta', PickleType(comparator=operator.eq)),
+                               Column('history', String(4096))
                                )
     #man.metadata.create_all()
     mapper(BaseData, man.basedata_table, polymorphic_on=man.basedata_table.c.type, polymorphic_identity='basedata')
@@ -369,9 +386,15 @@ class BaseOrderedDataSet(object):
 
     def __getitem__(self, key):
         if pyfusion.orm_manager.IS_ACTIVE:
-            return self.data_items[key].item
+            try:
+                return self.data_items[key].item
+            except KeyError:
+                # for loops require IndexError to detect
+                # end of sequence.
+                raise IndexError
         else:
             return self.data_items.__getitem__(key)
+
 
 @orm_register()
 def orm_load_baseordereddataset(man):

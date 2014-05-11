@@ -3,30 +3,49 @@
     run pyfusion/examples/plot_specgram shot_number=69270
 
     See process_cmd_line_args.py
+    channel_number
+    shot_number
+    diag_name
 """
 
 import pyfusion as pf
 import pylab as pl
 
+_var_default="""
 dev_name='H1Local'   # 'LHD'
-device = pf.getDevice(dev_name)
+dev_name='LHD'
+# ideally should be a direct call, passing the local dictionary
 
-#shot_number = 27233
-shot_number = 69270
-
-diag_name= 'MP'
-diag_name = "H1DTacqAxial"
+shot_number = None
+diag_name = None
+NFFT=256
+noverlap=None
 time_range = None
 channel_number=0
 hold=0
+"""
 
-# ideally should be a direct call, passing the local dictionary
-import pyfusion.utils
+exec(_var_default)
+
+from pyfusion.utils import process_cmd_line_args
+exec(process_cmd_line_args())
+
+device = pf.getDevice(dev_name)
+
+if dev_name == 'LHD':
+    if shot_number == None: shot_number = 27233
+    if diag_name == None: diag_name= 'MP'
+elif dev_name[0:1] == "H1":
+    if shot_number == None: shot_number = 69270
+    if diag_name == None: diag_name = "H1DTacqAxial"
+
 exec(pf.utils.process_cmd_line_args())
-#execfile('process_cmd_line_args.py')
+
+if noverlap==None: noverlap = NFFT/2
 
 d = device.acq.getdata(shot_number, diag_name)
 if time_range != None:
-    d.reduce_time(time_range)
-
-d.subtract_mean().plot_spectrogram(channel_number=channel_number, hold=hold)
+    dr = d.reduce_time(time_range)
+else:
+    dr = d
+dr.subtract_mean().plot_spectrogram(noverlap=noverlap, NFFT=NFFT, channel_number=channel_number, hold=hold)

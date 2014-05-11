@@ -61,13 +61,17 @@ class LHDTimeseriesDataFetcher(LHDBaseDataFetcher):
         else:
             signal_dict = newload(self.basename)
             
-        if ((chan_name == array(['MP5','HMP13','HMP05'])).any()):  flip = -1.
+        if ((chan_name == array(['MP5','HMP13','HMP05'])).any()):  
+            flip = -1.
+            print('flip')
         else: flip = 1.
         if self.diag_name[0]=='-': flip = -flip
 #        coords = get_coords_for_channel(**self.__dict__)
         ch = Channel(self.diag_name,  Coords('dummy', (0,0,0)))
         output_data = TimeseriesData(timebase=Timebase(signal_dict['timebase']),
                                  signal=Signal(flip*signal_dict['signal']), channels=ch)
+        # bdb - used "fetcher" instead of "self" in the "direct from LHD data" version
+        output_data.config_name = self.config_name  # when using saved files, same as name
         output_data.meta.update({'shot':self.shot})
 
         return output_data

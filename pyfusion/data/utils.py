@@ -1,7 +1,11 @@
 import os, string
 import random as _random
 from numpy import fft, conjugate, array, mean, arange, searchsorted, argsort, pi
+from pyfusion.utils.utils import warn
+from pyfusion.debug_ import debug_
+import pyfusion
 
+import numpy as np
 
 try:
     import uuid
@@ -31,9 +35,96 @@ def unique_id():
     except:
         return ''.join(_random.choice(string.letters) for i in range(50))
 
+def get_axes_pixcells(ax):
+    """ return the  pixcell coorindates of the axes ax
+    This is useful in determining how many characters will fit
+    """
+    return(ax.get_window_extent().bounds)
 
 def cps(a,b):
-    return fft.fft(a)*conjugate(fft.fft(b))
+    return fft.fft(a)*conjugate(fft.fft(b))    # bdb fft 10%
+
+def subdivide_interval(pts, overlap= None, debug=0):
+    """ return several intervals which straddle pts
+    with overlap of ov
+    The lowest x value is special - the point of division is much closer
+    to that x then zero.
+    overlap is a tuple (minoverlap, max), and describes the total overlap 
+    """
+    if overlap == None: overlap = [np.max(pts)/50, np.max(pts)/20]
+    if len(overlap) == 1:
+        warn('overlap should have a min and a max')
+        overlap = [overlap/3.0, overlap]
+
+    if (np.diff(pts)<0).any(): 
+        warn('points out of order - reordering')
+    pts = np.sort(pts)
+    begins = []
+    ends = []
+    for (i, x) in enumerate(pts):
+        if i == 0:
+            divider = x * 0.8 - overlap[1]/2.
+        else:
+            divider = (x + pts[i-1])/2.
+
+        if i == 0: 
+            begins.append(0)
+            ends.append(divider + overlap[1]/2.)
+        else:
+            this_overlap = min(max((divider - last_divider)/20,overlap[0]), 
+                               overlap[1])/2.
+            begins.append(last_divider - this_overlap)
+            ends.append(divider + this_overlap)
+        last_divider = divider
+
+    if debug>1: print(begins, pts, ends)
+    if debug>2: 
+        import pylab as pl
+        pl.figure()
+        for i in range(len(pts)):
+            pl.plot([begins[i],ends[i]],[i,i])
+            if i>0: pl.plot([pts[i-1],pts[i-1]],[i,i],'o')
+            pl.ylim(-1,20)
+            pl.show()
+    return(begins, ends)
+
+def find_peaks(arr, minratio=.001, debug=0):
+    """ find the peaks in the data in arr, by selecting points
+    where the slope changes sign, and the value is > minratio*max(arr) """
+    darr = np.diff(arr)
+    wnz = np.where(darr != 0)[0]
+    w_ch_sign = np.where(darr[wnz][0:-1]*darr[wnz][1:] < 0)[0]
+    # now check these to find the max
+    maxarr = np.max(arr[1:])  # to avoid zero freq
+    maxi = []
+
+    for i in w_ch_sign:
+        darr_left = darr[wnz[i]]
+        darr_right = darr[wnz[i]+1]
+        if darr_left > 0:  # have a maximum
+            imax = np.argmax(arr[wnz[i]:wnz[i]+2])
+            iarrmax = wnz[i]+imax  # imax was relative to subarray
+            if arr[iarrmax] > minratio*maxarr:
+                maxi.append(iarrmax)
+                if debug>1: print('arr elt {ii} = {v:.2f}'
+                                  .format(ii=iarrmax, 
+                                          v=arr[iarrmax]))
+    debug_(pyfusion.DEBUG,1, key='find_peaks')
+    return(np.array(maxi))
+
+
+def find_signal_spectral_peaks(timebase, signal, minratio = .001, debug=0):
+    ns = len(signal)
+    FT = np.fft.fft(signal-np.average(signal))/ns  # bdb 0% fft?
+    ipks = find_peaks(np.abs(FT)[0:ns/2], minratio = minratio, debug=1)
+    fpks = ipks/np.average(np.diff(timebase))/float(ns)
+    if debug>1:
+        import pylab as pl
+        pl.semilogy(np.abs(FT))
+        pl.semilogy(ipks,np.abs(FT)[ipks],'o')
+
+    return(ipks, fpks, np.abs(FT)[ipks])
+
 
 def peak_freq(signal,timebase,minfreq=0,maxfreq=1.e18):
     """
@@ -42,7 +133,7 @@ def peak_freq(signal,timebase,minfreq=0,maxfreq=1.e18):
     the correct freq in a simple case.
     """
     timebase = array(timebase)
-    sig_fft = fft.fft(signal)
+    sig_fft = fft.fft(signal)    # bdb 5% fft
     sample_time = float(mean(timebase[1:]-timebase[:-1]))
 
     #SRH modification, frequencies seemed a little bit off because of the -1 in the denominator
@@ -56,7 +147,7 @@ def peak_freq(signal,timebase,minfreq=0,maxfreq=1.e18):
     [minfreq_elmt,maxfreq_elmt] = searchsorted(fft_freqs,[minfreq,maxfreq])
     sig_fft = sig_fft[minfreq_elmt:maxfreq_elmt]
     fft_freqs = fft_freqs[minfreq_elmt:maxfreq_elmt]
-    
+
     peak_elmt = (argsort(abs(sig_fft)))[-1]
     return [fft_freqs[peak_elmt], peak_elmt]
 
@@ -79,7 +170,7 @@ def bin2list(input_value):
             output_list.append(ind)
     return output_list
 
-def split_names(names, pad=' '):
+def split_names(names, pad=' ',min_length=3):
     """ Given an array of strings, return an array of the part of the string
     (e.g. channel name) that varies, and optionally the prefix and suffix.
     The array of varying parts is first in the tuple in case others are not
@@ -87,10 +178,15 @@ def split_names(names, pad=' '):
     e.g.
     >>> split_names(['MP01','MP10'])
     (['01','10'], 'MP', '')
+    The pad char is put on the end of shorter names - a better way would be
+    to keep the end char the same, and pad in between the beginning and end
+    the per channel part is at least min_length long.  
+    This is not really needed, as the routine chooses the lenght so
+    that the results are not ambiguous  (MP01,MP02 -> 1,2 but MP01,MP12 -> 01,12
     """
     # make a new array with elements padded to the same length with <pad>
     nms = []
-    maxlen = max([len(nm) for nm in names])
+    maxlen = max([len(nm) for nm in names])  # length of the longest name
     for nm in names:
         nmarr = [c for c in nm]
         while len(nmarr)< maxlen: nmarr.append(pad)
@@ -118,6 +214,58 @@ def split_names(names, pad=' '):
     # check for no mismatch        
     if first==maxlen: return(['' for nm in names], ''.join(nms[0]),'')
     # otherwise return, (no need for special code for the case of no match at all)
+    if (1+last-first) < min_length:
+        add_chars = min_length - (1+last-first)
+        first = max(0, first-add_chars)
+        print(first, add_chars)
     return(([''.join(s) for s in nms_arr[:,first:last+1]],
             ''.join(nms_arr[0,0:first]),
             ''.join(nms_arr[0,last+1:maxlen+1])))
+
+def make_title(formatstr, input_data, channum=None, dict = {}, min_length=3):
+    """ return a string describing the shot number, channel name etc using a formatstr
+    which referes to items in a dictionary, assembled in this routine, based on input_data
+    and an optional dictionary which contains anything not otherwise available in input_data
+    """
+##    dict.update({'shot': input_data.meta['shot']})
+    try:
+        dict.update(input_data.meta)  # this gets all of it!
+
+
+        if channum == None:
+            name = ''
+        else:
+            try: name = input_data.channels[channum].name
+            except: name = input_data.channels.name
+
+        dict.update({'name': name})
+# replace internal strings of non-numbers with a single .  a14_input03 -> 14.03
+        short_name=''
+        last_was_number = False
+        for c in name:
+            if c>='0' and c<='9': 
+                short_name += c
+                last_was_number=True
+            else:  
+                if last_was_number: short_name += '.'
+                last_was_number=False
+
+                
+        if len(short_name) <= min_length: short_name=name
+        dict.update({'short_name': short_name})
+
+        return(formatstr % dict)
+    except Exception as ex:
+        warn('in make_title for format="%s", dict=%s' % (formatstr, dict),
+             exception=ex)
+        return('')
+
+if __name__ == '__main__':
+
+# test program
+    import pyfusion
+    x=find_peaks([1,2,3,4,2,1,1,10,5,4,3,4,5])
+    tb = np.linspace(0,1e-3,1000)
+    signal = np.cos(2*np.pi*20e3*tb) + np.sin(2*np.pi*40e3*tb)
+    (ip,fp,ap) = find_signal_spectral_peaks(tb, signal, debug=2)
+    subdivide_interval([.5,1,1.2,2,3], debug=2)

@@ -101,7 +101,7 @@ def get_local_shot_numbers(partial_name):
     global shot_list
     return(shot_list)
 
-# defaults
+_var_default="""
 wild_card = ''
 
 dev_name= 'LHD' # 'H1Local'
@@ -124,18 +124,30 @@ _type='F'
 fmod=0
 # t_max=0.08
 
-execfile('process_cmd_line_args.py')
+chan_name=''
+"""
+exec(_var_default)
+
+from pyfusion.utils import process_cmd_line_args
+exec(process_cmd_line_args())
 
 device = pyfusion.getDevice(dev_name)
 
-chan_name=''
 
 if dev_name=='TestDevice':
     chan_name='testch1'
     shot_number=1000
 elif (dev_name=='H1') or(dev_name=='H1Local'):
-    chan_name='mirnov_1_8'
-    shot_number=58123
+    if shot_number == None:
+        shot_number = 71059
+    #shot_number=58123
+    if shot_number > 70000:
+        diag_name='H1Poloidal1'
+        chan_name = 'H1PoloidalMirnov_1x'
+    else:
+        diag_name='H1_mirnov_array_1'
+        chan_name='H1_mirnov_array_1_coil_7'
+
 elif dev_name=='HeliotronJ': 
     chan_name='MP1'
     shot_number=33911
@@ -161,8 +173,7 @@ if pyfusion.VERBOSE>2:
 if channel_number==None: channel_number=0
 
 # tweak above parameters according to command line args
-execfile('process_cmd_line_args.py')
-
+exec(process_cmd_line_args())
 # arrays for test signal
 tm=arange(0,0.02,1e-6)
 y=sin((2e5 + 5e3*sin(fmod*2*pi*tm))*2*pi*tm)
@@ -190,7 +201,7 @@ def call_spec():
 
 #        data = pyfusion.load_channel(shot,name)
 #        data = pyfusion.acq.getdata(shot_number, diag_name)    
-        if data==None: return(False)
+        if type(data)==type(None): return(False)
         
         if _window==local_none: windowfn=pl.window_none
 #        else: windowfn=pl.window_hanning

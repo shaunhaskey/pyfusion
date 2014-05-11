@@ -8,6 +8,7 @@ from pyfusion.data.utils import cps, peak_freq, remap_periodic, list2bin, bin2li
 from pyfusion.data.base import PfMetaData
 import pyfusion
 from pyfusion.orm.utils import orm_register
+from pyfusion.debug_ import debug_
 
 import scipy
 
@@ -38,7 +39,7 @@ class Timebase(np.ndarray):
         try:
             return input_freq/(0.5*self.sample_freq)
         except:
-            return [i/(0.5*self.sample_freq) for i in sample_freq]
+            return [i/(0.5*self.sample_freq) for i in input_freq] # bdb
 
     def __array_finalize__(self, obj):
         # ``self`` is a new object resulting from
@@ -110,12 +111,15 @@ class Signal(np.ndarray):
         else:
             return self.shape[1]
 
-    def get_channel(self, channel_number):
+    def get_channel(self, channel_number, bounds=None):
         """allows us to use get_channel(0) no matter what ndim is"""
         if self.ndim == 1 and channel_number == 0:
-            return self
+            if bounds == None: return self
+            else: return self[bounds[0]:bounds[1]]
         elif self.ndim > 1:
-            return self[channel_number,:]
+            if bounds == None:
+                return self[channel_number,:]
+            else:return self[channel_number,bounds[0]:bounds[1]]
         else:
             raise ValueError
 
@@ -142,6 +146,9 @@ class TimeseriesData(BaseData):
                 raise ValueError, "signal has different number of samples to timebase"
         super(TimeseriesData, self).__init__(**kwargs)
 
+    def __eq__(self, other):
+        return all([np.array_equal(self.timebase, other.timebase),
+                    np.array_equal(self.signal, other.signal)])
 
     def generate_frequency_series(self, NFFT, step, window='hamming'):
         w =scipy.hamming(NFFT)
@@ -224,7 +231,7 @@ def orm_load_svd_data(man):
 
 
 class FlucStruc(BaseData):
-    def __init__(self, svd_data, sv_list, timebase, min_dphase = -np.pi):
+    def __init__(self, svd_data, sv_list, timebase, min_dphase = -np.pi, phase_pairs = None):
         # NOTE I'd prefer not to duplicate info here which is in svd_data - should be able to refer to that, once sqlalchemy is hooked in
         #self.topo_channels = svd_data.topo_channels
         self.channels = svd_data.channels
@@ -238,6 +245,7 @@ class FlucStruc(BaseData):
         # peak frequency for fluctuation structure
         self.timebase = timebase
         self.freq, self.freq_elmt = peak_freq(svd_data.chronos[sv_list[0]], self.timebase)
+        self.phase_pairs = phase_pairs
         self.t0 = timebase[0]
         # singular value filtered signals
         self.signal = np.dot(np.transpose(svd_data.topos[sv_list,:]),
@@ -247,6 +255,7 @@ class FlucStruc(BaseData):
         self.p = np.sum(svd_data.svs.take(sv_list)**2)/svd_data.E
         self.H = svd_data.H
         self.E = svd_data.E
+        debug_(pyfusion.DEBUG, 4, key='FlucStruc')
         super(FlucStruc, self).__init__()
 
     def save(self):
@@ -275,8 +284,14 @@ class FlucStruc(BaseData):
         #d_phase_dataset = OrderedDataSet(ordered_by="channel_1.name")
         d_phase_dataset = BaseOrderedDataSet('d_phase_%s' %datetime.now())
         ## append then sort should be faster than ordereddataset.add() [ fewer sorts()]
-        for i, d_ph in enumerate(d_phases):
-            d_phase_dataset.append(FloatDelta(self.channels[i], self.channels[i+1], d_ph))
+        if self.phase_pairs != None:
+            for i,phase_pair in enumerate(self.phase_pairs):
+                ind_a = self.channels.get_channel_index(phase_pair[0])
+                ind_b = self.channels.get_channel_index(phase_pair[1])
+                d_phase_dataset.append(FloatDelta(self.channels[ind_a],self.channels[ind_b],d_phases[i]))
+        else:
+            for i, d_ph in enumerate(d_phases):
+                d_phase_dataset.append(FloatDelta(self.channels[i], self.channels[i+1], d_ph))
 
         #d_phase_dataset.sort()
         if get_fourier_value==0:
