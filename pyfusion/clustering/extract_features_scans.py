@@ -100,7 +100,7 @@ class single_shot_extraction():
 class for_stft(single_shot_extraction):
     def get_data(self,):
         self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
-        self.data = self.data.subtract_mean(copy=False).normalise(method='v',separate=True,copy=False)
+        self.data = self.data.subtract_mean(copy=False)#.normalise(method='v',separate=True,copy=False)
         self.timebase = self.data.timebase
         self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
 

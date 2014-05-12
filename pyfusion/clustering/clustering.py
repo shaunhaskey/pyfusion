@@ -875,10 +875,22 @@ class clustering_object():
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
-                #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]).T / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])).T
-                tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,1:]) / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0:-1]))
+                divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
+                divisor = np.mean(np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]), axis = 0)
+                divisor = np.argmax(divisor)
+                divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,divisor])
+                divisor = np.mean(np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]),axis = 1)
+                #divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
+                tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]).T / divisor).T
+                #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,1:]) / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0:-1]))
                 ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
+                mean = np.mean(tmp[:,:], axis = 0)
+                ax[cluster].plot(mean,linestyle = '-',linewidth=1.5, color = 'b')
+                ax[cluster].plot(mean,linestyle = '-',linewidth=1.0, color = 'r')
+
         for i in ax:i.grid(True)
+        ax[0].set_xlim([0,tmp.shape[1]])
+        ax[0].set_ylim([0,2.5])
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
         fig.canvas.draw(); fig.show()
@@ -1679,15 +1691,16 @@ def EM_VMM_calc_best_fit(z,N=None,lookup=None):
 
 
 def EM_GMM_calc_best_fit(instance_array,weights):
-    '''Calculates MLE approximate parameters for mean and kappa for
-    the von Mises distribution. Can use a lookup table for the two Bessel
-    functions, or a scipy optimiser if lookup=None
+    '''Calculates MLE approximate parameters for mean and stddev for
+    the Gaussian distribution. 
 
     SH: 23May2013 '''
     N = np.sum(weights)
-    z = (instance_array.T * weights).T
+    #z = (instance_array.T * weights).T
+    z = (instance_array * weights[:,np.newaxis])
+    #print 'hello', np.allclose(z, z2)
     mean_theta = np.sum(z,axis=0)/float(N)
-    sigma = np.sqrt(1./N *np.sum(weights[:,np.newaxis] *(instance_array - mean_theta)**2, axis = 0))
+    sigma = np.sqrt(1./N *np.sum(weights[:,np.newaxis] * (instance_array - mean_theta)**2, axis = 0))
     return sigma, mean_theta
 
 
@@ -2622,7 +2635,7 @@ class EM_VMM_GMM_clustering_class(clustering_object):
                          'kappa_calc':kappa_calc,'hard_assignments':hard_assignments, 'method':'EM_VMM_GMM'}
         self.instance_array = copy.deepcopy(instance_array)
         self.instance_array_amps = np.abs(instance_array_amps)
-        norm_factor = np.sum(self.instance_array_amps,axis=1)
+        norm_factor = np.sum(np.abs(self.instance_array_amps),axis=1)
         self.instance_array_amps = self.instance_array_amps/norm_factor[:,np.newaxis]
 
         self.instance_array_complex = np.exp(1j*self.instance_array)
@@ -2704,8 +2717,8 @@ class EM_VMM_GMM_clustering_class(clustering_object):
             print 'finished initialising'
         elif self.start=='EM_GMM':
             self.cluster_assignments, self.cluster_details = EM_GMM_clustering(self.instance_array, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 1)
-            for i in list(set(cluster_assignments)):
-                self.zij[cluster_assignments==i,i] = 1
+            for i in list(set(self.cluster_assignments)):
+                self.zij[self.cluster_assignments==i,i] = 1
         else:
             print 'going with random option'
             #need to get this to work better.....
@@ -2743,6 +2756,8 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         self.convergence_std = np.sqrt(np.sum((self.std_list_old - self.std_list)**2))
 
     def _EM_VMM_GMM_expectation_step(self,):
+
+        #Can probably remove this and modify zij directly
         self.probs = self.zij*0
         #instance_array_c and instance_array_s are used to speed up cos(instance_array - mu) using
         #the trig identity cos(a-b) = cos(a)cos(b) + sin(a)sin(b)
@@ -2750,11 +2765,15 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         for mu_tmp, kappa_tmp, mean_tmp, std_tmp, p_hat, cluster_ident in zip(self.mu_list,self.kappa_list,self.mean_list, self.std_list, self.pi_hat,range(self.n_clusters)):
             #norm_fac_exp = self.n_clusters*np.log(1./(2.*np.pi)) - np.sum(np.log(spec.iv(0,kappa_tmp)))
             norm_fac_exp_VMM = -self.n_dimensions*np.log(2.*np.pi) - np.sum(np.log(spec.iv(0,kappa_tmp)))
-            norm_fac_exp_GMM = self.n_dimensions_amps*np.log(1./np.sqrt(2.*np.pi)) + np.sum(np.log(1./std_tmp))
+            norm_fac_exp_GMM = -self.n_dimensions_amps*np.log(2.*np.pi) - np.sum(np.log(std_tmp))
             pt1_GMM = -(self.instance_array_amps - mean_tmp)**2/(2*(std_tmp**2))
+            #Note the use of instance_array_c and s is from a trig identity
+            #This speeds this calc up significantly because mu_tmp is small compared to instance_array_c and s
+            #which can be precalculated
             pt1_VMM = kappa_tmp * (self.instance_array_c*np.cos(mu_tmp) + self.instance_array_s*np.sin(mu_tmp))
             self.probs[:,cluster_ident] = p_hat * np.exp(np.sum(pt1_VMM,axis=1) + norm_fac_exp_VMM +
                                                          np.sum(pt1_GMM,axis=1) + norm_fac_exp_GMM)
+        #This is to make sure the row sum is 1
         prob_sum = (np.sum(self.probs,axis=1))[:,np.newaxis]
         self.zij = self.probs/(prob_sum)
         #Calculate the log-likelihood - note this is quite an expensive computation and not really necessary
