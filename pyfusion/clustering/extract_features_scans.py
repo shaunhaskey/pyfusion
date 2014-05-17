@@ -3,7 +3,6 @@ from multiprocessing import Pool
 
 import clustering as clust
 import numpy as np
-import serial
 import pyfusion as pf
 import pyfusion.H1_scan_list as H1_scan_list
 
@@ -99,9 +98,28 @@ class single_shot_extraction():
 
 class for_stft(single_shot_extraction):
     def get_data(self,):
-        self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
-        self.data = self.data.subtract_mean(copy=False)#.normalise(method='v',separate=True,copy=False)
-        self.timebase = self.data.timebase
+        data_list = []
+        new_signal_length = 0
+        for i, arr in enumerate(self.array):
+            data_list.append(pf.getDevice('H1').acq.getdata(self.shot, arr).reduce_time([self.start_time, self.end_time]))
+            if i==0:
+                self.timebase = data_list[-1].timebase
+            else:
+                data_list[-1] = data_list[-1].change_time_base(self.timebase)
+            new_signal_length += data_list[-1].signal.shape[0]
+        new_sig = np.zeros((new_signal_length,self.timebase.shape[0]), dtype = float)
+        start_ind = 0
+        self.data = data_list[0]
+        for i in data_list:
+            end_ind = start_ind + i.signal.shape[0]
+            new_sig[start_ind:end_ind, :] = +i.signal
+            start_ind = end_ind
+            self.data.signal = +new_sig
+        print self.data.signal.shape
+        #self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
+        #self.data = self.data.subtract_mean(copy=False)#.normalise(method='v',separate=True,copy=False)
+        #self.timebase = self.data.timebase
+
         self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
 
         print self.other_arrays, self.other_array_labels
@@ -126,7 +144,9 @@ class for_stft(single_shot_extraction):
         for i in self.meta_data: self.misc_data_dict[i]=[]
         #for i in self.fs_values: self.misc_data_dict[i]=[]
 
-    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20):
+    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20, datamining_settings = None):
+        if datamining_settings == None: datamining_settings = {'n_clusters':16, 'n_iterations':20, 'start': 'k_means','verbose':0, 'method':'EM_VMM'}
+        print datamining_settings
         good_indices = find_peaks(self.data_fft, n_pts=n_pts, lower_freq = lower_freq)
 
 
@@ -157,8 +177,9 @@ class for_stft(single_shot_extraction):
 
         diff_angles = (np.diff(rel_data_angles))%(2.*np.pi)
         diff_angles[diff_angles>np.pi] -= (2.*np.pi)
-        z = perform_data_datamining(diff_angles, self.misc_data_dict, n_clusters = 16, n_iterations = 20)
-        instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by)
+        z = perform_data_datamining(diff_angles, self.misc_data_dict, datamining_settings)#n_clusters = 16, n_iterations = 20)
+        filter_item = 'EM_VMM_kappas' if datamining_settings['method'] == 'EM_VMM' else 'EM_GMM_variances'
+        instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by, filter_item = filter_item)
         self.instance_array_list = instance_array_cur
         self.misc_data_dict = misc_data_dict_cur
         #return instance_array_cur, misc_data_dict_cur, z.cluster_details['EM_VMM_kappas']
@@ -260,7 +281,9 @@ def single_shot_stft_wrapper(input_data):
     try:
         tmp = for_stft(*input_data)
         return copy.deepcopy(tmp.instance_array_list), copy.deepcopy(tmp.misc_data_dict)
-    except Exception, e:
+
+    #except Exception, e:
+    except None:
         print "!!!!!!!!!!!!!! EXCEPTION"
         print input_data
         print e
@@ -549,21 +572,28 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
     return mirnov_angles, misc_data_dict
 
 #generate the datamining object, and perform the datamining
-def perform_data_datamining(mirnov_angles, misc_data_dict, n_clusters = 16, n_iterations = 60):
+def perform_data_datamining(mirnov_angles, misc_data_dict, datamining_settings):# n_clusters = 16, n_iterations = 60):
     feat_obj = clust.feature_object(instance_array = mirnov_angles, misc_data_dict = misc_data_dict)
-    z = feat_obj.cluster(method="EM_VMM",n_clusters=n_clusters,n_iterations = n_iterations,start='k_means',verbose=0)
+    #z = feat_obj.cluster(method="EM_VMM",n_clusters=n_clusters,n_iterations = n_iterations,start='k_means',verbose=0)
+    print 'perform datamining', datamining_settings
+    z = feat_obj.cluster(**datamining_settings)
+    #n_clusters=n_clusters,n_iterations = n_iterations,start='k_means',verbose=0)
     #z.plot_VM_distributions()
     #z = feat_obj.cluster(method="k_means",n_clusters=n_clusters,n_iterations = n_iterations)
     #z.fit_vonMises()
     return z
 
-def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None, cutoff_by='sigma_eq'):
+def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None, cutoff_by='sigma_eq', filter_item = 'EM_VMM_kappas'):
     total_passes = 0; start = 1
     misc_data_dict2 = {}
-    for i in range(z.cluster_details['EM_VMM_kappas'].shape[0]):
-        ave_kappa = np.sum(z.cluster_details['EM_VMM_kappas'][i,:])/z.cluster_details['EM_VMM_kappas'].shape[1]
-        std_eq, std_bar = clust.sigma_eq_sigma_bar(z.cluster_details['EM_VMM_kappas'][i,:],deg=True)
+    for i in range(z.cluster_details[filter_item].shape[0]):
+        if filter_item == 'EM_VMM_kappas':
+            ave_kappa = np.sum(z.cluster_details[filter_item][i,:])/z.cluster_details[filter_item].shape[1]
+            std_eq, std_bar = clust.sigma_eq_sigma_bar(z.cluster_details[filter_item][i,:],deg=True)
 
+        elif filter_item == 'EM_GMM_variances':
+            std_bar = np.mean(np.sqrt(z.cluster_details[filter_item][i,:]))
+            std_eq = (np.product(np.sqrt(z.cluster_details[filter_item][i,:])))**(1./z.cluster_details[filter_item][i,:].shape[0])
 
         #print i, np.sum(z.cluster_details['EM_VMM_kappas'][i,:])/z.cluster_details['EM_VMM_kappas'].shape[1],np.sum(z.cluster_assignments==i)
         current = z.cluster_assignments==i

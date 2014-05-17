@@ -3,8 +3,6 @@ Shaun Haskey : 2May2013
 
 Many routines for clustering and plotting.
 
-
-
 '''
 import numpy as np
 import matplotlib.pyplot as pt
@@ -756,7 +754,7 @@ class clustering_object():
         if pub_fig:
             fig_kh.savefig(filename, bbox_inches='tight', pad_inches=0.01)
 
-        fig_kh.suptitle(suptitle,fontsize=8)
+        fig_kh.suptitle(suptitle.replace('_','-'),fontsize=8)
         fig_kh.canvas.draw(); fig_kh.show()
         return fig_kh, ax_kh
 
@@ -787,15 +785,20 @@ class clustering_object():
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
                 tmp = modtwopi(self.feature_obj.instance_array[current_items,:], offset = 0)
-                cur_mean = modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0)
+                #instance_array_complex = np.exp(1j*instance_array)
+                kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
+                cur_mean = modtwopi(cur_mean, offset = 0)
+                #cur_mean = modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0)
                 means.append(cur_mean)
                 if cumul_sum:
                     tmp = np.cumsum(tmp,axis = 1)/(2.*np.pi)
                     means[-1] = np.cumsum(means[-1])/(2.*np.pi)
                 plot_ax = ax[cluster] if not ax_supplied else ax[count]
                 tmp1 = tmp[::decimation,:]
-                tmp1[(tmp1 - cur_mean[np.newaxis,:]) > np.pi]-=2.*np.pi
-                tmp1[(tmp1 - cur_mean[np.newaxis,:]) < -np.pi]+=2.*np.pi
+                while np.sum((tmp1 - cur_mean[np.newaxis,:]) > np.pi)>0:
+                    tmp1[(tmp1 - cur_mean[np.newaxis,:]) > np.pi]-=2.*np.pi
+                while np.sum((tmp1 - cur_mean[np.newaxis,:]) < -np.pi)>0:
+                    tmp1[(tmp1 - cur_mean[np.newaxis,:]) < -np.pi]+=2.*np.pi
                 plot_ax.plot(tmp1.T, linestyle = '-',linewidth=0.05, color = colours[count], zorder = 0)
                 axes_list.append(plot_ax)
                 count+=1
@@ -803,7 +806,8 @@ class clustering_object():
         for mean, color, clust, axis in zip(means,colours, cluster_list, axes_list):
             axis.plot(mean,linestyle = '-',linewidth=1.5, color = 'k')
             axis.plot(mean,linestyle = '-',linewidth=1.0, color = 'r')
-            ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+            #ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+            ax[0].set_xlim([0,self.feature_obj.instance_array.shape[1]])
             if not cumul_sum: ax[0].set_ylim([-np.pi, np.pi])
             for i in ax:i.grid(True)
         if not ax_supplied:
@@ -1158,17 +1162,19 @@ class clusterer_wrapper(clustering_object):
     '''
     def __init__(self, feature_obj, method='k-means',comment='', **kwargs):
         self.feature_obj = feature_obj
-        print 'kwargs', kwargs
+        #print 'kwargs', kwargs
         #Default settings are declared first, which are overwritten by kwargs
         #if appropriate- this is for record keeping of all settings that are used
         cluster_funcs = {'k_means': k_means_clustering, 'EM_GMM' : EM_GMM_clustering,
                          'k_means_periodic' : k_means_periodic, 'EM_VMM' : EM_VMM_clustering_wrapper,
                          'EM_GMM2' : EM_GMM_clustering_wrapper,
-                         'EM_VMM_GMM': EM_VMM_GMM_clustering_wrapper}
+                         'EM_VMM_GMM': EM_VMM_GMM_clustering_wrapper,
+                         'EM_GMM_GMM': EM_GMM_GMM_clustering}
 
         #EM_VMM_clustering,'EM_VMM_soft':EM_VMM_clustering_soft}
         cluster_func_class = {'k_means': 'func', 'EM_GMM' : 'func',
-                         'k_means_periodic' : 'func', 'EM_VMM' : 'func', 'EM_GMM2':'func', 'EM_VMM_GMM':'func'}
+                              'k_means_periodic' : 'func', 'EM_VMM' : 'func', 'EM_GMM2':'func', 
+                              'EM_VMM_GMM':'func', 'EM_GMM_GMM':'func'}
         
         default_settings = {'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':None,'use_scikit':1},
                             'EM_GMM' : {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30},
@@ -1181,22 +1187,27 @@ class clusterer_wrapper(clustering_object):
                                          'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1},
                             'EM_VMM_GMM' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'random',
                                         'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
-                                        'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1}}
+                                            'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1},
+                           'EM_GMM_GMM' : {'n_clusters':9, 'number_of_starts':1, 'covariance_type':'diag'}}
 
+#EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag')
         #EM_VMM_GMM_clustering_wrapper(instance_array, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1):
         #replace EM_VMM and EM_VMM_soft with the class.... somehow
         self.settings = default_settings[method]
         self.settings.update(kwargs)
+        print self.settings
         cluster_func = cluster_funcs[method]
-        print method, self.settings
+        #print method, self.settings
         if cluster_func_class[method]=='func':
-            print 'func based...'
-            if method!='EM_VMM_GMM':
-                self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array, **self.settings)
-            else:
+            #print 'func based...'
+            if method=='EM_VMM_GMM':
                 self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array, self.feature_obj.misc_data_dict['mirnov_data'], **self.settings)
+            elif method=='EM_GMM_GMM':
+                self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.misc_data_dict['mirnov_data'], **self.settings)
+            else:
+                self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array, **self.settings)
         else:
-            print 'class based...'
+            #print 'class based...'
             tmp = cluster_func(self.feature_obj.instance_array, **self.settings)
             self.cluster_assignments, self.cluster_details = tmp.cluster_assignments, tmp.cluster_details
         self.settings['method']=method
@@ -1960,6 +1971,7 @@ def EM_VMM_clustering_wrapper2(input_data):
 
 def EM_VMM_clustering_wrapper(instance_array, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1, seeds = None):
     cluster_list = [n_clusters for i in range(number_of_starts)]
+    print 'hello EMVMM clustering wrapper'
     if seeds == None:
         seed_list = [int(np.random.rand()*10000) for i in range(number_of_starts)]# )[None]*number_of_starts
         print 'seeds..........', seed_list
@@ -2637,7 +2649,10 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         self.instance_array_amps = np.abs(instance_array_amps)
         norm_factor = np.sum(np.abs(self.instance_array_amps),axis=1)
         self.instance_array_amps = self.instance_array_amps/norm_factor[:,np.newaxis]
-
+        tmp = np.zeros((self.instance_array_amps.shape[0], self.instance_array_amps.shape[1]),dtype=complex)
+        for i in range(1,self.instance_array_amps.shape[1]):
+            tmp[:,i-1] = self.instance_array_amps[:,i]/self.instance_array_amps[:,i-1]
+        self.instance_array_amps = np.abs(tmp)
         self.instance_array_complex = np.exp(1j*self.instance_array)
         self.instance_array_c = np.real(self.instance_array_complex)
         self.instance_array_s = np.imag(self.instance_array_complex)
@@ -2782,3 +2797,58 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         #L = np.sum(zij[probs>1.e-20]*np.log(probs[probs>1.e-20]))
         #L = np.sum(zij*np.log(np.clip(probs,1.e-10,1)))
 
+
+
+
+def EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag'):
+    print 'starting EM-GMM-GMM algorithm from sckit-learn, k=%d, retries : %d'%(n_clusters,number_of_starts)
+    tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
+    for i in range(1,instance_array_amps.shape[1]):
+        tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
+    input_data = np.hstack((np.real(tmp), np.imag(tmp)))
+    #n_instances, n_dimensions = self.instance_array.shape
+    #self.n_dimensions_amps = self.instance_array_amps.shape[1]
+    #self.n_clusters = n_clusters
+    #self.max_iterations = n_iterations
+    #self.start = start
+    #self.hard_assignments = hard_assignments
+    #self.seed = seed
+
+    # if sin_cos==1:
+    #     print '  using sine and cosine of the phases'
+    #     sin_cos_instances = np.zeros((instance_array.shape[0],instance_array.shape[1]*2),dtype=float)
+    #     sin_cos_instances[:,::2]=np.cos(instance_array)
+    #     sin_cos_instances[:,1::2]=np.sin(instance_array)
+    #     input_data = sin_cos_instances
+    # else:
+    #     print '  using raw phases'
+    #     input_data = instance_array
+    gmm = mixture.GMM(n_components = n_clusters, covariance_type = covariance_type, n_init = number_of_starts)
+    gmm.fit(input_data)
+    cluster_assignments = gmm.predict(input_data)
+    bic_value = gmm.bic(input_data)
+    LL = np.sum(gmm.score(input_data))
+    gmm_covars_tmp = np.array(gmm._get_covars())
+    if show_covariances:
+        fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex = True, sharey = True)
+        im = []
+        for i in range(gmm_covars_tmp.shape[0]):
+            im.append(ax[i].imshow(np.abs(gmm_covars_tmp[i,:,:]),aspect='auto'))
+            print im[-1].get_clim()
+            if clim==None:
+                im[-1].set_clim([0, im[-1].get_clim()[1]*0.5])
+            else:
+                im[-1].set_clim(clim)
+        #clims = [np.min(np.abs(gmm_covars_tmp)),np.max(np.abs(gmm_covars_tmp))*0.5]
+        #for i in im : i.set_clim(clims)
+        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig.canvas.draw();fig.show()
+    gmm_covars = np.array([np.diagonal(i) for i in gmm._get_covars()])
+    gmm_means = gmm.means_
+    #kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
+
+    if sin_cos:
+        cluster_details = {'EM_GMM_means_sc':gmm_means, 'EM_GMM_variances_sc':gmm_covars, 'EM_GMM_covariances_sc':gmm_covars_tmp,'BIC':bic_value, 'LL':LL}
+    else:
+        cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'BIC':bic_value,'LL':LL}
+    return cluster_assignments, cluster_details
