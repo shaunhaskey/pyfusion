@@ -144,11 +144,10 @@ class for_stft(single_shot_extraction):
         for i in self.meta_data: self.misc_data_dict[i]=[]
         #for i in self.fs_values: self.misc_data_dict[i]=[]
 
-    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20, datamining_settings = None):
+    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20, datamining_settings = None, upper_freq = 500000):
         if datamining_settings == None: datamining_settings = {'n_clusters':16, 'n_iterations':20, 'start': 'k_means','verbose':0, 'method':'EM_VMM'}
         print datamining_settings
-        good_indices = find_peaks(self.data_fft, n_pts=n_pts, lower_freq = lower_freq)
-
+        good_indices = find_peaks(self.data_fft, n_pts=n_pts, lower_freq = lower_freq, upper_freq = upper_freq)
 
         #Use the best peaks to the get the mirnov data
         rel_data = return_values(self.data_fft.signal,good_indices)
@@ -177,7 +176,9 @@ class for_stft(single_shot_extraction):
 
         diff_angles = (np.diff(rel_data_angles))%(2.*np.pi)
         diff_angles[diff_angles>np.pi] -= (2.*np.pi)
+
         z = perform_data_datamining(diff_angles, self.misc_data_dict, datamining_settings)#n_clusters = 16, n_iterations = 20)
+
         filter_item = 'EM_VMM_kappas' if datamining_settings['method'] == 'EM_VMM' else 'EM_GMM_variances'
         instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by, filter_item = filter_item)
         self.instance_array_list = instance_array_cur
@@ -410,7 +411,7 @@ def get_array_data(current_shot, array_name, time_window=None,new_timebase=None)
         data = data.reduce_time(time_window)
     return data
 
-def find_peaks(data_fft, n_pts=20, lower_freq = 1500, by_average=True, moving_ave=5, peak_cutoff = 0):
+def find_peaks(data_fft, n_pts=20, lower_freq = 1500, by_average=True, moving_ave=5, peak_cutoff = 0, upper_freq = 500000):
     time_pts, n_dims, freqs = data_fft.signal.shape
     good_indices = []
     for i in range(time_pts):
@@ -444,7 +445,7 @@ def find_peaks(data_fft, n_pts=20, lower_freq = 1500, by_average=True, moving_av
 
         #Take the best n_pts_tmp values - exclude low frequency
         for j in tmp_indices[-n_pts_tmp:]:
-            if (np.abs(data_fft.frequency_base[j]-0)>lower_freq) and (how_peaked[j]>peak_cutoff):
+            if (np.abs(data_fft.frequency_base[j]-0)>lower_freq) and (how_peaked[j]>peak_cutoff) and (data_fft.frequency_base[j]<upper_freq):
                 good_indices_tmp.append(j)
         good_indices.append(good_indices_tmp)
         if len(np.unique(good_indices_tmp)) != len(good_indices_tmp):print "!!!!!!!!!!!!! duplicate problem"

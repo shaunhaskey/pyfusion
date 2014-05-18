@@ -496,6 +496,63 @@ class clustering_object():
         fig.canvas.draw();fig.show()
         return fig, ax
 
+
+    def plot_GMM_GMM_distributions(self,):
+        '''Plot the vonMises distributions for each dimension for each cluster
+        Also plot the histograms - these are overlayed with dashed lines
+
+        SH: 9May2013
+        '''
+        #Plot the two distributions over each other to check for goodness of fit
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        cluster_list = list(set(self.cluster_assignments))
+        n_clusters = np.max([len(cluster_list),np.max(cluster_list)])
+        fig_re, ax_re = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        fig_im, ax_im = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        delta = 300
+        x = np.linspace(-np.pi, np.pi, delta)
+        instance_array = self.feature_obj.instance_array
+        cluster_mu_re = self.cluster_details['EM_GMM_means_re']
+        cluster_sigma_re = self.cluster_details['EM_GMM_variances_re']
+        cluster_mu_im = self.cluster_details['EM_GMM_means_im']
+        cluster_sigma_im = self.cluster_details['EM_GMM_variances_im']
+
+        for cluster in cluster_list:
+            current_items = self.cluster_assignments==cluster
+            print 'hello'
+            if np.sum(current_items)>10:
+                for dimension in range(cluster_mu_re.shape[1]):
+                    Z_EM_re = norm(loc=cluster_mu_re[cluster][dimension], scale=np.sqrt(cluster_sigma_re[cluster][dimension])).pdf(x)
+                    Z_EM_im = norm(loc=cluster_mu_im[cluster][dimension], scale=np.sqrt(cluster_sigma_im[cluster][dimension])).pdf(x)
+                    if np.sum(np.isnan(Z_EM_re))==0:
+                        tmp = ax_re[cluster].plot(x,Z_EM_re,'-')
+                        current_color = tmp[0].get_color()
+                        ax_re[cluster].text(x[np.argmax(Z_EM_re)],np.max(Z_EM_re),str(dimension))
+                    if np.sum(np.isnan(Z_EM_im))==0:
+                        tmp = ax_im[cluster].plot(x,Z_EM_im,'-')
+                        ax_im[cluster].text(x[np.argmax(Z_EM_im)],np.max(Z_EM_im),str(dimension))
+                        current_color = tmp[0].get_color()
+                    #bins = np.linspace(-np.pi,np.pi,360)
+                    #histogram_data = (instance_array[current_items,dimension]) %(2.*np.pi)
+                    #histogram_data[histogram_data>np.pi]-=(2.*np.pi)
+                    #tmp3 = np.histogram(histogram_data,bins = bins,range=[-np.pi,np.pi])
+                    #dx = tmp3[1][1]-tmp3[1][0]
+                    #integral = np.sum(dx*tmp3[0])
+                    #if np.sum(np.isnan(tmp3[0]/integral))==0:
+                    #    ax[cluster].plot(tmp3[1][:-1]+dx/2, tmp3[0]/integral, marker=',',linestyle="--",color=current_color)
+        ax_re[-1].set_xlim([-np.pi,np.pi])
+        ax_re[-1].set_ylim([0,4])
+        ax_im[-1].set_xlim([-np.pi,np.pi])
+        ax_im[-1].set_ylim([0,4])
+        fig_im.subplots_adjust(hspace=0, wspace=0)
+        #fig_im.suptitle(suptitle,fontsize=8)
+        fig_im.canvas.draw();fig_im.show()
+        fig_re.subplots_adjust(hspace=0, wspace=0)
+        #fig_re.suptitle(suptitle,fontsize=8)
+        fig_re.canvas.draw();fig_im.show()
+        #return fig, ax
+
+
     def plot_dimension_histograms(self,pub_fig = 0, filename='plot_dim_hist.pdf',specific_dimensions = None, extra_txt_labels = '', label_loc = [-2,1.5], ylim = None):
         '''For each dimension in the data set, plot the histogram of the phase differences
         Overlay the vonMises mixture model along with the individual vonMises distributions 
@@ -581,6 +638,104 @@ class clustering_object():
         fig.suptitle(suptitle.replace('_','\char`_'),fontsize = 8)
         fig.canvas.draw(); fig.show()
         return fig, ax
+
+
+
+    def plot_dimension_histograms_GMM_GMM(self,pub_fig = 0, filename='plot_dim_hist.pdf',specific_dimensions = None, extra_txt_labels = '', label_loc = [-2,1.5], ylim = None):
+        '''For each dimension in the data set, plot the histogram of the real and imag part of the measurements
+        overlay the GMM's - used for the GMM-GMM clustering method
+
+        SRH: 18May2014
+        '''
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        cluster_mu = self.cluster_details['EM_GMM_means_re'] + 1j*self.cluster_details['EM_GMM_means_im']
+        cluster_sigma = self.cluster_details['EM_GMM_variances_re'] + 1j*self.cluster_details['EM_GMM_variances_im']
+        dimensions = cluster_mu.shape[1]
+
+        instance_array_amps = self.feature_obj.misc_data_dict['mirnov_data']
+        tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
+        for i in range(1,instance_array_amps.shape[1]): tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
+        if specific_dimensions == None: specific_dimensions = range(dimensions)
+        fig_re, ax_re = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
+        fig_im, ax_im = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
+        for i,dim in enumerate(specific_dimensions):
+            ax_re[i].hist(np.real(tmp[:,dim]), bins=180,normed=True,histtype='stepfilled',range=[-np.pi,np.pi])
+            ax_im[i].hist(np.imag(tmp[:,dim]), bins=180,normed=True,histtype='stepfilled',range=[-np.pi,np.pi])
+
+        if self.cluster_assignments!=None: cluster_list = list(set(self.cluster_assignments))
+        x = np.linspace(-np.pi, np.pi, 300)
+        cluster_prob_list = []
+        for cluster in cluster_list:
+            cluster_prob_list.append(float(np.sum(self.cluster_assignments==cluster))/float(len(self.cluster_assignments)))
+        for i, dimension in enumerate(specific_dimensions):
+            for ax_cur, op in zip([ax_re,ax_im],[np.real, np.imag]):
+                cluster_sum = x*0
+                for cluster, cluster_prob in zip(cluster_list, cluster_prob_list):
+                    Z_EM = cluster_prob * norm(loc=op(cluster_mu[cluster][dimension]), scale=np.sqrt(op(cluster_sigma[cluster][dimension]))).pdf(x)
+                    cluster_sum += Z_EM
+                    tmp = ax_cur[i].plot(x,Z_EM,'-',linewidth=0.8)
+                tmp = ax_cur[i].plot(x,cluster_sum,'-',linewidth=2)
+                print '{area},'.format(area = np.sum(cluster_sum*(x[1]-x[0]))),
+                ax_cur[i].text(label_loc[0], label_loc[1],r'$\Delta \psi_%d$ '%(dimension+1,) + extra_txt_labels, fontsize = 8)#,bbox=dict(facecolor='white', alpha=0.5))
+                ax_cur[i].locator_params(nbins=7)
+        print ''
+        for ax_cur, fig_cur in zip([ax_re, ax_im],[fig_re, fig_im]):
+            ax_cur[-1].set_xlim([-np.pi,np.pi])
+            ax_cur[-1].set_ylim([0,1.3])
+            fig_cur.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig_cur.suptitle(suptitle.replace('_','\char`_'),fontsize = 8)
+            fig_cur.canvas.draw(); fig_cur.show()
+
+
+    def plot_dimension_histograms_VMM_GMM(self,pub_fig = 0, filename='plot_dim_hist.pdf',specific_dimensions = None, extra_txt_labels = '', label_loc = [-2,1.5], ylim = None):
+        '''For each dimension in the data set, plot the histogram of the real and imag part of the measurements
+        overlay the GMM's - used for the GMM-GMM clustering method
+
+        SRH: 18May2014
+        '''
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        cluster_GMM_mu = self.cluster_details['EM_GMM_means']
+        cluster_GMM_sigma = self.cluster_details['EM_GMM_std']
+        dimensions = cluster_GMM_mu.shape[1]
+
+        instance_array_amps = self.feature_obj.misc_data_dict['mirnov_data']
+        tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
+        for i in range(1,instance_array_amps.shape[1]): tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
+        if specific_dimensions == None: specific_dimensions = range(dimensions)
+        fig_ang, ax_ang = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
+        fig_abs, ax_abs = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
+        amp_vals = np.abs(tmp)
+        amp_vals[np.angle(tmp)<0]*= (-1)
+        for i,dim in enumerate(specific_dimensions):
+            ax_abs[i].hist(amp_vals[:,dim], bins=180,normed=True,histtype='stepfilled',range=[-np.pi,np.pi])
+            ax_ang[i].hist(np.angle(tmp[:,dim]), bins=180,normed=True,histtype='stepfilled',range=[-np.pi,np.pi])
+
+        if self.cluster_assignments!=None: cluster_list = list(set(self.cluster_assignments))
+        x = np.linspace(-np.pi, np.pi, 300)
+        cluster_prob_list = []
+        for cluster in cluster_list:
+            cluster_prob_list.append(float(np.sum(self.cluster_assignments==cluster))/float(len(self.cluster_assignments)))
+        for i, dimension in enumerate(specific_dimensions):
+            #for ax_cur, op in zip([ax_re,ax_im],[np.real, np.imag]):
+            #for ax_cur, op in zip([ax_ang,ax_abs],[np.angle, np.abs]):
+            for ax_cur, op in zip([ax_abs],[np.abs]):
+                cluster_sum = x*0
+                for cluster, cluster_prob in zip(cluster_list, cluster_prob_list):
+                    Z_EM = cluster_prob * norm(loc=cluster_GMM_mu[cluster][dimension], scale=cluster_GMM_sigma[cluster][dimension]).pdf(x)
+                    cluster_sum += Z_EM
+                    tmp = ax_cur[i].plot(x,Z_EM,'-',linewidth=0.8)
+                tmp = ax_cur[i].plot(x,cluster_sum,'-',linewidth=2)
+                print '{area},'.format(area = np.sum(cluster_sum*(x[1]-x[0]))),
+                ax_cur[i].text(label_loc[0], label_loc[1],r'$\Delta \psi_%d$ '%(dimension+1,) + extra_txt_labels, fontsize = 8)#,bbox=dict(facecolor='white', alpha=0.5))
+                ax_cur[i].locator_params(nbins=7)
+        print ''
+        #for ax_cur, fig_cur in zip([ax_re, ax_im],[fig_re, fig_im]):
+        for ax_cur, fig_cur in zip([ax_ang, ax_abs],[fig_ang, fig_abs]):
+            ax_cur[-1].set_xlim([-np.pi,np.pi])
+            ax_cur[-1].set_ylim([0,1.3])
+            fig_cur.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig_cur.suptitle(suptitle.replace('_','\char`_'),fontsize = 8)
+            fig_cur.canvas.draw(); fig_cur.show()
 
 
 
@@ -1714,6 +1869,20 @@ def EM_GMM_calc_best_fit(instance_array,weights):
     sigma = np.sqrt(1./N *np.sum(weights[:,np.newaxis] * (instance_array - mean_theta)**2, axis = 0))
     return sigma, mean_theta
 
+def EM_gamma_calc_best_fit(instance_array, weights):
+    '''Calculates MLE approximate parameters for mean and stddev for
+    the Gaussian distribution. 
+
+    SH: 23May2013 '''
+    N = np.sum(weights)
+    #z = (instance_array.T * weights).T
+    z = (instance_array * weights[:,np.newaxis])
+    #print 'hello', np.allclose(z, z2)
+    s = np.log(np.sum(z,axis=0)/float(N)) - np.sum(np.log(z),axis=0)/float(N)
+    k = (3. - s + np.sqrt((s-3)**2 + 24*s))/(12.*s)
+    theta = np.sum(z,axis=0)/float(N)/k
+    return k, theta
+
 
 
 #We can do this step in parallel....
@@ -2643,16 +2812,19 @@ class EM_VMM_GMM_clustering_class(clustering_object):
 
         SH: 15June2013
         '''
+        print 'hello'
         self.settings = {'n_clusters':n_clusters,'n_iterations':n_iterations,'n_cpus':n_cpus,'start':start,
                          'kappa_calc':kappa_calc,'hard_assignments':hard_assignments, 'method':'EM_VMM_GMM'}
         self.instance_array = copy.deepcopy(instance_array)
-        self.instance_array_amps = np.abs(instance_array_amps)
-        norm_factor = np.sum(np.abs(self.instance_array_amps),axis=1)
-        self.instance_array_amps = self.instance_array_amps/norm_factor[:,np.newaxis]
-        tmp = np.zeros((self.instance_array_amps.shape[0], self.instance_array_amps.shape[1]),dtype=complex)
-        for i in range(1,self.instance_array_amps.shape[1]):
-            tmp[:,i-1] = self.instance_array_amps[:,i]/self.instance_array_amps[:,i-1]
+        #self.instance_array_amps = np.abs(instance_array_amps)
+        #norm_factor = np.sum(np.abs(self.instance_array_amps),axis=1)
+        #self.instance_array_amps = self.instance_array_amps/norm_factor[:,np.newaxis]
+        tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
+        for i in range(1,instance_array_amps.shape[1]):
+            tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
         self.instance_array_amps = np.abs(tmp)
+        self.instance_array_amps[np.angle(tmp)<0]*=(-1)
+        print np.sum(self.instance_array_amps<0), np.sum(self.instance_array_amps>=0)
         self.instance_array_complex = np.exp(1j*self.instance_array)
         self.instance_array_c = np.real(self.instance_array_complex)
         self.instance_array_s = np.imag(self.instance_array_complex)
@@ -2797,33 +2969,21 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         #L = np.sum(zij[probs>1.e-20]*np.log(probs[probs>1.e-20]))
         #L = np.sum(zij*np.log(np.clip(probs,1.e-10,1)))
 
-
-
-
 def EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag'):
+    '''
+    Cluster using a Gaussian for the real and imag part of the ratio of the complex value between adjacent channels
+    Supposed to be for imaging diagnostics
+
+    SRH: 18May2014
+    '''
     print 'starting EM-GMM-GMM algorithm from sckit-learn, k=%d, retries : %d'%(n_clusters,number_of_starts)
     tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
     for i in range(1,instance_array_amps.shape[1]):
         tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
     input_data = np.hstack((np.real(tmp), np.imag(tmp)))
-    #n_instances, n_dimensions = self.instance_array.shape
-    #self.n_dimensions_amps = self.instance_array_amps.shape[1]
-    #self.n_clusters = n_clusters
-    #self.max_iterations = n_iterations
-    #self.start = start
-    #self.hard_assignments = hard_assignments
-    #self.seed = seed
-
-    # if sin_cos==1:
-    #     print '  using sine and cosine of the phases'
-    #     sin_cos_instances = np.zeros((instance_array.shape[0],instance_array.shape[1]*2),dtype=float)
-    #     sin_cos_instances[:,::2]=np.cos(instance_array)
-    #     sin_cos_instances[:,1::2]=np.sin(instance_array)
-    #     input_data = sin_cos_instances
-    # else:
-    #     print '  using raw phases'
-    #     input_data = instance_array
-    gmm = mixture.GMM(n_components = n_clusters, covariance_type = covariance_type, n_init = number_of_starts)
+    n_dim = tmp.shape[1]
+    print n_dim
+    gmm = mixture.GMM(n_components = n_clusters, covariance_type = covariance_type, n_init = number_of_starts, n_iter = 500)
     gmm.fit(input_data)
     cluster_assignments = gmm.predict(input_data)
     bic_value = gmm.bic(input_data)
@@ -2843,12 +3003,19 @@ def EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number
         #for i in im : i.set_clim(clims)
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         fig.canvas.draw();fig.show()
-    gmm_covars = np.array([np.diagonal(i) for i in gmm._get_covars()])
-    gmm_means = gmm.means_
-    #kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
 
-    if sin_cos:
-        cluster_details = {'EM_GMM_means_sc':gmm_means, 'EM_GMM_variances_sc':gmm_covars, 'EM_GMM_covariances_sc':gmm_covars_tmp,'BIC':bic_value, 'LL':LL}
-    else:
-        cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'BIC':bic_value,'LL':LL}
+    gmm_covars = np.array([np.diagonal(i) for i in gmm._get_covars()])
+    gmm_covars_re, gmm_covars_im = np.hsplit(gmm_covars,2)
+    gmm_covars_tmp_re = np.array([i[0:n_dim,0:n_dim] for i in gmm._get_covars()])
+    gmm_covars_tmp_im = np.array([i[n_dim:,n_dim:] for i in gmm._get_covars()])
+    gmm_means = gmm.means_
+    gmm_means_re, gmm_means_im = np.hsplit(gmm_means, 2)
+    print gmm_means_re.shape, gmm_means_im.shape
+    
+
+    #kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
+    #cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'BIC':bic_value,'LL':LL}
+    cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_covars_re, 'EM_GMM_covariances_re':gmm_covars_tmp_re,'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_covars_im, 'EM_GMM_covariances_im':gmm_covars_tmp_im,'BIC':bic_value,'LL':LL}
+    print gmm.converged_
+
     return cluster_assignments, cluster_details
