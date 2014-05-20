@@ -144,16 +144,16 @@ class for_stft(single_shot_extraction):
         for i in self.meta_data: self.misc_data_dict[i]=[]
         #for i in self.fs_values: self.misc_data_dict[i]=[]
 
-    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20, datamining_settings = None, upper_freq = 500000):
+    def get_interesting(self, n_pts = 20, lower_freq = 1500, cutoff_by = 'sigma_eq', filter_cutoff = 20, datamining_settings = None, upper_freq = 500000, filter_item = 'EM_VMM_kappas'):
         if datamining_settings == None: datamining_settings = {'n_clusters':16, 'n_iterations':20, 'start': 'k_means','verbose':0, 'method':'EM_VMM'}
         print datamining_settings
         good_indices = find_peaks(self.data_fft, n_pts=n_pts, lower_freq = lower_freq, upper_freq = upper_freq)
-
+        self.good_indices = good_indices
         #Use the best peaks to the get the mirnov data
         rel_data = return_values(self.data_fft.signal,good_indices)
         self.misc_data_dict['mirnov_data'] = +rel_data
         rel_data_angles = np.angle(rel_data)
-
+        self.instance_array_amps = +rel_data
         #Use the best peaks to get the other interesting info
         for i,tmp_label in zip(self.other_arrays_fft, self.other_array_labels):
             if tmp_label[0]!=None: 
@@ -177,10 +177,10 @@ class for_stft(single_shot_extraction):
         diff_angles = (np.diff(rel_data_angles))%(2.*np.pi)
         diff_angles[diff_angles>np.pi] -= (2.*np.pi)
 
-        z = perform_data_datamining(diff_angles, self.misc_data_dict, datamining_settings)#n_clusters = 16, n_iterations = 20)
+        self.z = perform_data_datamining(diff_angles, self.misc_data_dict, datamining_settings)#n_clusters = 16, n_iterations = 20)
 
-        filter_item = 'EM_VMM_kappas' if datamining_settings['method'] == 'EM_VMM' else 'EM_GMM_variances'
-        instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by, filter_item = filter_item)
+        #filter_item = 'EM_VMM_kappas' if datamining_settings['method'] == 'EM_VMM' else 'EM_GMM_variances'
+        instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(self.z, ave_kappa_cutoff = filter_cutoff, ax = None, cutoff_by = cutoff_by, filter_item = filter_item)
         self.instance_array_list = instance_array_cur
         self.misc_data_dict = misc_data_dict_cur
         #return instance_array_cur, misc_data_dict_cur, z.cluster_details['EM_VMM_kappas']
@@ -349,7 +349,7 @@ def multi_extract(shot_selection,array_name, other_arrays = None, other_array_la
                     misc_data_dict[i] = np.append(misc_data_dict[i], tmp[1][i],axis=0)
         else:
             print 'One shot may have failed....'
-    return clust.feature_object(instance_array = instance_array, misc_data_dict = misc_data_dict)
+    return clust.feature_object(instance_array = instance_array, instance_array_amps = +misc_data_dict['mirnov_data'], misc_data_dict = misc_data_dict)
 
 
 def multi_svd(shot_selection,array_name, other_arrays = None, other_array_labels = None, meta_data = None,
@@ -398,7 +398,7 @@ def multi_svd(shot_selection,array_name, other_arrays = None, other_array_labels
                     misc_data_dict[i] = np.append(misc_data_dict[i], tmp[1][i],axis=0)
         else:
             print 'One shot may have failed....'
-    return clust.feature_object(instance_array = instance_array, misc_data_dict = misc_data_dict)
+    return clust.feature_object(instance_array = instance_array,  misc_data_dict = misc_data_dict)
     
 
 def get_array_data(current_shot, array_name, time_window=None,new_timebase=None):
@@ -470,10 +470,14 @@ def return_non_freq_dependent(tmp_array, good_indices,force_index = None):
     return tmp_data
 
 def return_time_values(tmp_array, good_indices):
+    start = 1
     for i, tmp_indices in enumerate(good_indices):
         tmp_indices=np.array(tmp_indices)*0 + i
-        if i==0: 
+        if len(tmp_indices)<1:
+            pass
+        elif start: 
             tmp_data = tmp_array[tmp_indices]
+            start = 0
         else:
             tmp_data = np.append(tmp_data,tmp_array[tmp_indices],axis=0)
     return tmp_data
@@ -574,7 +578,7 @@ def extract_data_by_picking_peaks(current_shot, array_names,NFFT=1024, hop=256,n
 
 #generate the datamining object, and perform the datamining
 def perform_data_datamining(mirnov_angles, misc_data_dict, datamining_settings):# n_clusters = 16, n_iterations = 60):
-    feat_obj = clust.feature_object(instance_array = mirnov_angles, misc_data_dict = misc_data_dict)
+    feat_obj = clust.feature_object(instance_array = mirnov_angles, instance_array_amps = misc_data_dict['mirnov_data'], misc_data_dict = misc_data_dict)
     #z = feat_obj.cluster(method="EM_VMM",n_clusters=n_clusters,n_iterations = n_iterations,start='k_means',verbose=0)
     print 'perform datamining', datamining_settings
     z = feat_obj.cluster(**datamining_settings)
@@ -587,14 +591,15 @@ def perform_data_datamining(mirnov_angles, misc_data_dict, datamining_settings):
 def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None, cutoff_by='sigma_eq', filter_item = 'EM_VMM_kappas'):
     total_passes = 0; start = 1
     misc_data_dict2 = {}
-    for i in range(z.cluster_details[filter_item].shape[0]):
+    n_clusters, n_dims = z.cluster_details[filter_item].shape
+    for i in range(n_clusters):
         if filter_item == 'EM_VMM_kappas':
-            ave_kappa = np.sum(z.cluster_details[filter_item][i,:])/z.cluster_details[filter_item].shape[1]
+            ave_kappa = np.sum(z.cluster_details[filter_item][i,:])/n_dims
             std_eq, std_bar = clust.sigma_eq_sigma_bar(z.cluster_details[filter_item][i,:],deg=True)
 
         elif filter_item == 'EM_GMM_variances':
             std_bar = np.mean(np.sqrt(z.cluster_details[filter_item][i,:]))
-            std_eq = (np.product(np.sqrt(z.cluster_details[filter_item][i,:])))**(1./z.cluster_details[filter_item][i,:].shape[0])
+            std_eq = (np.product(np.sqrt(z.cluster_details[filter_item][i,:])))**(1./n_dims)
 
         #print i, np.sum(z.cluster_details['EM_VMM_kappas'][i,:])/z.cluster_details['EM_VMM_kappas'].shape[1],np.sum(z.cluster_assignments==i)
         current = z.cluster_assignments==i
@@ -615,19 +620,19 @@ def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None
                 prob_cutoff = z.cluster_details['zij'][:,i]>prob_cutoff
                 current_new = current*prob_cutoff
             else:
-                current_new = current
+                current_new = +current
                 
             #print '###############', np.sum(current), np.sum(prob_cutoff), prob_cutoff.shape, current.shape#, np.sum(current_new)
             if start==1:
                 #print '################', np.sum(z.cluster_details['zij'][current,:]>0.90), np.sum(z.cluster_details['zij'][current,i]<0.90)
                 instance_array2 = z.feature_obj.instance_array[current_new,:]
                 start = 0
-                for i in z.feature_obj.misc_data_dict.keys(): misc_data_dict2[i] = copy.deepcopy(z.feature_obj.misc_data_dict[i][current_new])
+                for j in z.feature_obj.misc_data_dict.keys(): misc_data_dict2[j] = copy.deepcopy(z.feature_obj.misc_data_dict[j][current_new])
             else:
                 #print '################', np.sum(z.cluster_details['zij'][current,:]>0.90), np.sum(z.cluster_details['zij'][current,i]<0.90)
                 instance_array2 = np.append(instance_array2, z.feature_obj.instance_array[current_new,:],axis=0)
-                for i in z.feature_obj.misc_data_dict.keys():
-                    misc_data_dict2[i] = np.append(misc_data_dict2[i], z.feature_obj.misc_data_dict[i][current_new],axis=0)
+                for j in z.feature_obj.misc_data_dict.keys():
+                    misc_data_dict2[j] = np.append(misc_data_dict2[j], z.feature_obj.misc_data_dict[j][current_new],axis=0)
     #Catch incase no good clusters were found....
     if start==1: instance_array2 = None; misc_data_dict2 = None
     return instance_array2, misc_data_dict2

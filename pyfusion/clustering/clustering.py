@@ -271,7 +271,7 @@ class feature_object():
     This is suposed to be the feature object
     SH : 6May2013
     '''
-    def __init__(self, instance_array=None, misc_data_dict=None, filename = None):#, misc_data_labels):
+    def __init__(self, instance_array=None, misc_data_dict=None, filename = None, instance_array_amps = None):#, misc_data_labels):
         '''
         feature_object... this contains all of the raw data that is a 
         result of feature extraction. It can be initialised by passing
@@ -283,6 +283,7 @@ class feature_object():
             self.load_data(filename)
         else:
             self.instance_array = instance_array
+            if instance_array_amps != None: self.instance_array_amps = instance_array_amps
             self.misc_data_dict = misc_data_dict
             self.clustered_objects = []
 
@@ -654,7 +655,8 @@ class clustering_object():
 
         instance_array_amps = self.feature_obj.misc_data_dict['mirnov_data']
         tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
-        for i in range(1,instance_array_amps.shape[1]): tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
+        tmp = instance_array_amps/np.sum(instance_array_amps, axis = 1)[:,np.newaxis]
+        #for i in range(1,instance_array_amps.shape[1]): tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
         if specific_dimensions == None: specific_dimensions = range(dimensions)
         fig_re, ax_re = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
         fig_im, ax_im = make_grid_subplots(len(specific_dimensions), sharex = True, sharey = True)
@@ -1031,7 +1033,7 @@ class clustering_object():
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
         n_clusters = len(cluster_list)
         fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
-        for cluster in cluster_list:
+        for i,cluster in enumerate(cluster_list):
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
                 divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
@@ -1042,10 +1044,10 @@ class clustering_object():
                 #divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
                 tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]).T / divisor).T
                 #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,1:]) / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0:-1]))
-                ax[cluster].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
+                ax[i].plot(tmp[::decimation,:].T,'k-',linewidth=0.05)
                 mean = np.mean(tmp[:,:], axis = 0)
-                ax[cluster].plot(mean,linestyle = '-',linewidth=1.5, color = 'b')
-                ax[cluster].plot(mean,linestyle = '-',linewidth=1.0, color = 'r')
+                ax[i].plot(mean,linestyle = '-',linewidth=1.5, color = 'b')
+                ax[i].plot(mean,linestyle = '-',linewidth=1.0, color = 'r')
 
         for i in ax:i.grid(True)
         ax[0].set_xlim([0,tmp.shape[1]])
@@ -1054,6 +1056,52 @@ class clustering_object():
         fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
         fig.canvas.draw(); fig.show()
         return fig, ax
+
+    def plot_clusters_re_im_lines(self,decimation=1):
+        '''Plot all the phase lines for the clusters
+        Good clusters will show up as dense areas of line
+
+        SH: 9May2013
+        '''
+        cluster_list = list(set(self.cluster_assignments))
+        suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
+        n_clusters = len(cluster_list)
+        fig_re, ax_re = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        #fig_im, ax_im = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        data_complex = self.feature_obj.instance_array_amps/np.sum(self.feature_obj.instance_array_amps, axis = 1)[:,np.newaxis]
+        for cluster in cluster_list:
+            current_items = self.cluster_assignments==cluster
+            if np.sum(current_items)>10:
+                # divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
+                # divisor = np.mean(np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]), axis = 0)
+                # divisor = np.argmax(divisor)
+                # divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,divisor])
+                # divisor = np.mean(np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]),axis = 1)
+                # #divisor = np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0])
+                #data_complex = self.feature_obj.instance_array_amps/(instance_array_amps[:,2])[:,np.newaxis]
+                tmp = data_complex[current_items,:]
+                #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,:]).T / divisor).T
+                #tmp = (np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,1:]) / np.abs(self.feature_obj.misc_data_dict['mirnov_data'][current_items,0:-1]))
+                ax_re[cluster].plot(np.real(tmp[::decimation,:].T),linewidth=0.05, color = 'k', linestyle = '-')
+                ax_re[cluster].plot(np.imag(tmp[::decimation,:].T),linewidth=0.05, color = 'b', linestyle = '-')
+                mean = np.mean(np.real(tmp[:,:]), axis = 0)
+                ax_re[cluster].plot(mean,linestyle = '-',linewidth=1.5, color = 'r')
+                mean = np.mean(np.imag(tmp[:,:]), axis = 0)
+                ax_re[cluster].plot(mean,linestyle = '-',linewidth=1.5, color = 'r')
+
+        for i in ax_re:i.grid(True)
+        #for i in ax_im:i.grid(True)
+        ax_re[0].set_xlim([0,tmp.shape[1]])
+        ax_re[0].set_ylim([-0.75,0.75])
+        #ax_im[0].set_xlim([0,tmp.shape[1]])
+        #ax_im[0].set_ylim([-0.5,0.5])
+        fig_re.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        #fig_im.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig_re.suptitle(suptitle.replace('_','-'), fontsize = 8)
+        fig_re.canvas.draw(); fig_re.show()
+        #fig_im.suptitle(suptitle.replace('_','-'), fontsize = 8)
+        #fig_im.canvas.draw(); fig_re.show()
+        #return fig, ax
 
     def plot_fft_amp_lines(self,decimation=1):
         '''Plot all the phase lines for the clusters
@@ -1324,12 +1372,13 @@ class clusterer_wrapper(clustering_object):
                          'k_means_periodic' : k_means_periodic, 'EM_VMM' : EM_VMM_clustering_wrapper,
                          'EM_GMM2' : EM_GMM_clustering_wrapper,
                          'EM_VMM_GMM': EM_VMM_GMM_clustering_wrapper,
-                         'EM_GMM_GMM': EM_GMM_GMM_clustering}
+                         'EM_GMM_GMM': EM_GMM_GMM_clustering,
+                         'EM_GMM_GMM2':EM_GMM_GMM2_clustering_wrapper}
 
         #EM_VMM_clustering,'EM_VMM_soft':EM_VMM_clustering_soft}
         cluster_func_class = {'k_means': 'func', 'EM_GMM' : 'func',
                               'k_means_periodic' : 'func', 'EM_VMM' : 'func', 'EM_GMM2':'func', 
-                              'EM_VMM_GMM':'func', 'EM_GMM_GMM':'func'}
+                              'EM_VMM_GMM':'func', 'EM_GMM_GMM':'func', 'EM_GMM_GMM2':'func'}
         
         default_settings = {'k_means': {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30,'seed':None,'use_scikit':1},
                             'EM_GMM' : {'n_clusters':9, 'sin_cos':1, 'number_of_starts':30},
@@ -1343,7 +1392,11 @@ class clusterer_wrapper(clustering_object):
                             'EM_VMM_GMM' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'random',
                                         'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
                                             'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1},
-                           'EM_GMM_GMM' : {'n_clusters':9, 'number_of_starts':1, 'covariance_type':'diag'}}
+                            'EM_GMM_GMM' : {'n_clusters':9, 'number_of_starts':1, 'covariance_type':'diag'},
+                            'EM_GMM_GMM2' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'random',
+                                            'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
+                                            'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1}}
+
 
 #EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag')
         #EM_VMM_GMM_clustering_wrapper(instance_array, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1):
@@ -1357,8 +1410,11 @@ class clusterer_wrapper(clustering_object):
             #print 'func based...'
             if method=='EM_VMM_GMM':
                 self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array, self.feature_obj.misc_data_dict['mirnov_data'], **self.settings)
-            elif method=='EM_GMM_GMM':
+            if method=='EM_GMM_GMM2':
                 self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.misc_data_dict['mirnov_data'], **self.settings)
+            elif method=='EM_GMM_GMM':
+                self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array_amps, **self.settings)
+                #self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.misc_data_dict['mirnov_data'], **self.settings)
             else:
                 self.cluster_assignments, self.cluster_details = cluster_func(self.feature_obj.instance_array, **self.settings)
         else:
@@ -2791,6 +2847,40 @@ def EM_VMM_GMM_clustering_wrapper(instance_array, instance_array_amps, n_cluster
     return results[tmp_loc]
 
 
+def EM_GMM_GMM2_clustering_wrapper2(input_data):
+    tmp = EM_GMM_GMM_clustering_class_self(*input_data)
+    return copy.deepcopy(tmp.cluster_assignments), copy.deepcopy(tmp.cluster_details)
+
+def EM_GMM_GMM2_clustering_wrapper(instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1):
+
+    cluster_list = [n_clusters for i in range(number_of_starts)]
+    seed_list = [i for i in range(number_of_starts)]
+    rep = itertools.repeat
+    from multiprocessing import Pool
+    input_data_iter = itertools.izip(rep(instance_array_amps), rep(n_clusters),
+                                     rep(n_iterations), rep(n_cpus), rep(start), rep(kappa_calc),
+                                     rep(hard_assignments), rep(kappa_converged),
+                                     rep(mu_converged),rep(min_iterations), rep(LL_converged),
+                                     rep(verbose), seed_list)
+    if n_cpus>1:
+        pool_size = n_cpus
+        pool = Pool(processes=pool_size, maxtasksperchild=3)
+        print 'creating pool map'
+        results = pool.map(EM_GMM_GMM2_clustering_wrapper2, input_data_iter)
+        print 'waiting for pool to close '
+        pool.close()
+        print 'joining pool'
+        pool.join()
+        print 'pool finished'
+    else:
+        results = map(EM_GMM_GMM2_clustering_wrapper2, input_data_iter)
+    LL_results = []
+    for tmp in results: LL_results.append(tmp[1]['LL'][-1])
+    print LL_results
+    tmp_loc = np.argmax(LL_results)
+    return results[tmp_loc]
+
+
 class EM_VMM_GMM_clustering_class(clustering_object):
     def __init__(self, instance_array, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, seed=None):
         '''This model is supposed to include a mixture of Gaussian and von
@@ -2969,53 +3059,194 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         #L = np.sum(zij[probs>1.e-20]*np.log(probs[probs>1.e-20]))
         #L = np.sum(zij*np.log(np.clip(probs,1.e-10,1)))
 
-def EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag'):
+
+class EM_GMM_GMM_clustering_class_self(clustering_object):
+    def __init__(self, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, seed=None):
+        '''This model is supposed to include a mixture of Gaussian and von
+        Mises distributions to allow datamining of data that essentially
+        consists of complex numbers (amplitude and phase) such as most
+        Fourier based measurements. Supposed to be an improvement on the
+        case of just using the phases between channels - more interested
+        in complex modes such as HAE, and also looking at data that is
+        more amplitude based such as line of sight chord through the
+        plasma for interferometers and imaging diagnostics.
+
+        Note the amplitude data is included in
+        misc_data_dict['mirnov_data'] from the stft-clustering
+        extraction technique
+
+        Need to figure out a way to normalise it... so that shapes of
+        different amplitudes will look the same
+        Need to plumb this in somehow...
+
+        SH: 20May2014
+        '''
+        print 'EM_GMM_GMM2', instance_array_amps.shape
+        self.settings = {'n_clusters':n_clusters,'n_iterations':n_iterations,'n_cpus':n_cpus,'start':start,
+                         'kappa_calc':kappa_calc,'hard_assignments':hard_assignments, 'method':'EM_VMM_GMM'}
+        #self.instance_array = copy.deepcopy(instance_array)
+        self.instance_array_amps = instance_array_amps
+        self.data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
+        self.input_data = np.hstack((np.real(self.data_complex), np.imag(self.data_complex)))
+        self.n_dim = self.data_complex.shape[1]
+        self.n_instances, self.n_dimensions = self.input_data.shape
+
+        self.n_clusters = n_clusters; self.max_iterations = n_iterations; self.start = start
+        self.hard_assignments = hard_assignments; self.seed = seed
+        if self.seed == None: self.seed = os.getpid()
+        print('seed,',self.seed)
+        np.random.seed(self.seed)
+        self.iteration = 1
+
+        self.initialisation()
+        self.convergence_record = []; converged = 0 
+        self.LL_diff = np.inf
+        while converged!=1:
+            start_time = time.time()
+            self._EM_VMM_GMM_expectation_step()
+            if self.hard_assignments:
+                print 'hard assignments'
+                self.cluster_assignments = np.argmax(self.zij,axis=1)
+                self.zij = self.zij *0
+                for i in range(self.n_clusters):
+                    self.zij[self.cluster_assignments==i,i] = 1
+
+            valid_items = self.probs>(1.e-300)
+            self.LL_list.append(np.sum(self.zij[valid_items]*np.log(self.probs[valid_items])))
+            self._EM_VMM_GMM_maximisation_step()
+            if (self.iteration>=2): self.LL_diff = np.abs(((self.LL_list[-1] - self.LL_list[-2])/self.LL_list[-2]))
+            if verbose:
+                print 'Time for iteration %d :%.2f, mu_convergence:%.3e, kappa_convergence:%.3e, LL: %.8e, LL_dif : %.3e'%(self.iteration,time.time() - start_time,self.convergence_mean, self.convergence_std, self.LL_list[-1],self.LL_diff)
+            self.convergence_record.append([self.iteration, self.convergence_mean, self.convergence_std])
+            mean_converged = mu_converged; std_converged = kappa_converged
+            if (self.iteration > min_iterations) and (self.convergence_mean<mean_converged) and (self.convergence_std<std_converged) and (self.LL_diff<LL_converged):
+                converged = 1
+                print 'Convergence criteria met!!'
+            elif self.iteration > n_iterations:
+                converged = 1
+                print 'Max number of iterations'
+            self.iteration+=1
+        print os.getpid(), 'Time for iteration %d :%.2f, mu_convergence:%.3e, kappa_convergence:%.3e, LL: %.8e, LL_dif : %.3e'%(self.iteration,time.time() - start_time,self.convergence_mean, self.convergence_std,self.LL_list[-1],self.LL_diff)
+        #print 'AIC : %.2f'%(2*(mu_list.shape[0]*mu_list.shape[1])-2.*LL_list[-1])
+        self.cluster_assignments = np.argmax(self.zij,axis=1)
+        self.BIC = -2*self.LL_list[-1]+self.n_clusters*3*np.log(self.n_dimensions)
+        gmm_means_re, gmm_means_im = np.hsplit(self.mean_list, 2)
+        gmm_vars_re, gmm_vars_im = np.hsplit(self.std_list**2, 2)
+
+        self.cluster_details = {'EM_GMM_means':self.mean_list, 'EM_GMM_variances':self.std_list**2,'BIC':self.BIC,'LL':self.LL_list, 
+                                'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_vars_re,
+                                'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_vars_im}
+
+        #cluster_mu = self.cluster_details['EM_GMM_means_re'] + 1j*self.cluster_details['EM_GMM_means_im']
+        #cluster_sigma = self.cluster_details['EM_GMM_variances_re'] + 1j*self.cluster_details['EM_GMM_variances_im']
+
+        # #Extract the means, variances and covariances
+        # gmm_covars = np.array(gmm._get_covars())
+        # gmm_vars = np.array([np.diagonal(i) for i in gmm._get_covars()])
+        # gmm_vars_re, gmm_vars_im = np.hsplit(gmm_vars,2)
+        # gmm_covars_re = np.array([i[0:n_dim,0:n_dim] for i in gmm._get_covars()])
+        # gmm_covars_im = np.array([i[n_dim:,n_dim:] for i in gmm._get_covars()])
+        # gmm_means = gmm.means_
+        # gmm_means_re, gmm_means_im = np.hsplit(gmm_means, 2)
+        # #Bundle up the answer
+        # cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_vars, 'EM_GMM_covariances':gmm_covars, 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_vars_re, 'EM_GMM_covariances_re':gmm_covars_re,'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_vars_im, 'EM_GMM_covariances_im':gmm_covars_im,'BIC':bic_value,'LL':LL}
+
+
+
+    def initialisation(self):
+        '''This involves generating the mu and kappa arrays
+        Then initialising based on self.start using k-means, EM-GMM or
+        giving every instance a random probability of belonging to each cluster
+        SH: 7June2013
+        '''
+        self.mean_list = np.ones((self.n_clusters,self.n_dimensions),dtype=float)
+        self.std_list = np.ones((self.n_clusters,self.n_dimensions),dtype=float)
+        self.LL_list = []
+        self.zij = np.zeros((self.n_instances, self.n_clusters),dtype=float)
+        #maybe only the random option is valid here.....
+        if self.start=='k_means':
+            print 'Initialising clusters using a fast k_means run'
+            self.cluster_assignments, self.cluster_details = k_means_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 3, seed=self.seed)
+            for i in list(set(self.cluster_assignments)):
+                self.zij[self.cluster_assignments==i,i] = 1
+            #print 'finished initialising'
+        elif self.start=='EM_GMM':
+            self.cluster_assignments, self.cluster_details = EM_GMM_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 1)
+            for i in list(set(self.cluster_assignments)):
+                self.zij[self.cluster_assignments==i,i] = 1
+        else:
+            print 'going with random option'
+            #need to get this to work better.....
+            self.zij = np.random.random(self.zij.shape)
+            #and normalise so each row adds up to 1....
+            self.zij = self.zij / ((np.sum(self.zij,axis=1))[:,np.newaxis])
+        self._EM_VMM_GMM_maximisation_step()
+
+    def _EM_VMM_GMM_maximisation_step(self):
+        '''Maximisation step SH : 7June2013
+        '''
+        self.pi_hat = np.sum(self.zij,axis=0)/float(self.n_instances)
+        self.mean_list_old = self.mean_list.copy()
+        self.std_list_old = self.std_list.copy()
+        for cluster_ident in range(self.n_clusters):
+            self.std_list[cluster_ident,:], self.mean_list[cluster_ident,:] = EM_GMM_calc_best_fit(self.input_data, self.zij[:,cluster_ident])
+        #Prevent ridiculous situations happening....
+        self.std_list = np.clip(self.std_list,0.001,300)
+        self._EM_VMM_GMM_check_convergence()
+
+    def _EM_VMM_GMM_check_convergence(self,):
+        self.convergence_mean = np.sqrt(np.sum((self.mean_list_old - self.mean_list)**2))
+        self.convergence_std = np.sqrt(np.sum((self.std_list_old - self.std_list)**2))
+
+    def _EM_VMM_GMM_expectation_step(self,):
+        #Can probably remove this and modify zij directly
+        self.probs = self.zij*0
+        for mean_tmp, std_tmp, p_hat, cluster_ident in zip(self.mean_list, self.std_list, self.pi_hat,range(self.n_clusters)):
+            norm_fac_exp_GMM = -self.n_dimensions*np.log(2.*np.pi) - np.sum(np.log(std_tmp))
+            pt1_GMM = -(self.input_data - mean_tmp)**2/(2*(std_tmp**2))
+            self.probs[:,cluster_ident] = p_hat * np.exp(np.sum(pt1_GMM,axis=1) + norm_fac_exp_GMM)
+        #This is to make sure the row sum is 1
+        prob_sum = (np.sum(self.probs,axis=1))[:,np.newaxis]
+        self.zij = self.probs/(prob_sum)
+
+
+def EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag', n_iter = 50):
     '''
     Cluster using a Gaussian for the real and imag part of the ratio of the complex value between adjacent channels
     Supposed to be for imaging diagnostics
 
     SRH: 18May2014
     '''
-    print 'starting EM-GMM-GMM algorithm from sckit-learn, k=%d, retries : %d'%(n_clusters,number_of_starts)
-    tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
-    for i in range(1,instance_array_amps.shape[1]):
-        tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
-    input_data = np.hstack((np.real(tmp), np.imag(tmp)))
-    n_dim = tmp.shape[1]
-    print n_dim
-    gmm = mixture.GMM(n_components = n_clusters, covariance_type = covariance_type, n_init = number_of_starts, n_iter = 500)
+    print 'starting EM-GMM-GMM algorithm from sckit-learn, clusters=%d, retries : %d'%(n_clusters,number_of_starts)
+    #tmp = np.zeros((instance_array_amps.shape[0], instance_array_amps.shape[1]-1),dtype=complex)
+    #for i in range(1,instance_array_amps.shape[1]):
+    #    tmp[:,i-1] = instance_array_amps[:,i]/instance_array_amps[:,i-1]
+    #print 'ratio :', np.sum(np.abs(np.imag(instance_array_amps)))/np.sum(np.abs(np.real(instance_array_amps)))
+    data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
+    #data_complex = instance_array_amps/(instance_array_amps[:,2])[:,np.newaxis]
+    #print 'hello..', instance_array_amps.shape
+    input_data = np.hstack((np.real(data_complex), np.real(data_complex)))
+    #k_means_cluster_assignments, k_means_cluster_details = k_means_clustering(input_data, n_clusters=n_clusters, sin_cos = 1, number_of_starts = 3,)
+    #print k_means_cluster_assignments
+    #input_data = np.hstack((np.abs(data_complex),(np.abs(data_complex))))
+    n_dim = data_complex.shape[1]
+    #print n_clusters
+    gmm = mixture.GMM(n_components = n_clusters, covariance_type = covariance_type, n_init = number_of_starts, n_iter = n_iter,)
     gmm.fit(input_data)
     cluster_assignments = gmm.predict(input_data)
     bic_value = gmm.bic(input_data)
     LL = np.sum(gmm.score(input_data))
-    gmm_covars_tmp = np.array(gmm._get_covars())
-    if show_covariances:
-        fig, ax = make_grid_subplots(gmm_covars_tmp.shape[0], sharex = True, sharey = True)
-        im = []
-        for i in range(gmm_covars_tmp.shape[0]):
-            im.append(ax[i].imshow(np.abs(gmm_covars_tmp[i,:,:]),aspect='auto'))
-            print im[-1].get_clim()
-            if clim==None:
-                im[-1].set_clim([0, im[-1].get_clim()[1]*0.5])
-            else:
-                im[-1].set_clim(clim)
-        #clims = [np.min(np.abs(gmm_covars_tmp)),np.max(np.abs(gmm_covars_tmp))*0.5]
-        #for i in im : i.set_clim(clims)
-        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        fig.canvas.draw();fig.show()
 
-    gmm_covars = np.array([np.diagonal(i) for i in gmm._get_covars()])
-    gmm_covars_re, gmm_covars_im = np.hsplit(gmm_covars,2)
-    gmm_covars_tmp_re = np.array([i[0:n_dim,0:n_dim] for i in gmm._get_covars()])
-    gmm_covars_tmp_im = np.array([i[n_dim:,n_dim:] for i in gmm._get_covars()])
+    #Extract the means, variances and covariances
+    gmm_covars = np.array(gmm._get_covars())
+    gmm_vars = np.array([np.diagonal(i) for i in gmm._get_covars()])
+    gmm_vars_re, gmm_vars_im = np.hsplit(gmm_vars,2)
+    gmm_covars_re = np.array([i[0:n_dim,0:n_dim] for i in gmm._get_covars()])
+    gmm_covars_im = np.array([i[n_dim:,n_dim:] for i in gmm._get_covars()])
     gmm_means = gmm.means_
     gmm_means_re, gmm_means_im = np.hsplit(gmm_means, 2)
-    print gmm_means_re.shape, gmm_means_im.shape
-    
-
-    #kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
-    #cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'BIC':bic_value,'LL':LL}
-    cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_covars, 'EM_GMM_covariances':gmm_covars_tmp, 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_covars_re, 'EM_GMM_covariances_re':gmm_covars_tmp_re,'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_covars_im, 'EM_GMM_covariances_im':gmm_covars_tmp_im,'BIC':bic_value,'LL':LL}
-    print gmm.converged_
+    #Bundle up the answer
+    cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_vars, 'EM_GMM_covariances':gmm_covars, 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_vars_re, 'EM_GMM_covariances_re':gmm_covars_re,'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_vars_im, 'EM_GMM_covariances_im':gmm_covars_im,'BIC':bic_value,'LL':LL}
+    print 'EM_GMM_GMM Converged: ', gmm.converged_
 
     return cluster_assignments, cluster_details
