@@ -24,18 +24,21 @@ class single_shot_extraction():
         self.samples = samples
         self.overlap = overlap
         self.meta_data = meta_data
-        print(os.getpid(), shot)
-        self.get_data()
-        self.get_interesting(**self.extraction_settings)
-
-    def get_data(self,):
-        self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
-        self.data = self.data.subtract_mean(copy=False).normalise(method='v',separate=True,copy=False)
-        self.data_segmented = self.data.segment(self.samples, overlap = self.overlap, datalist = 1)
-        print self.other_arrays, self.other_array_labels
+        #print(os.getpid(), shot)
         if self.other_arrays == None: self.other_array_labels = []
         if self.other_arrays == None: self.other_arrays = []; 
         if self.meta_data == None : self.meta_data = []
+        self.get_data()
+        self.get_interesting(**self.extraction_settings)
+        print 'finished, {}, found {}'.format(self.shot,self.instance_array_list.shape)
+
+    def get_data(self,):
+        self.get_primary_array()
+        #self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
+        self.data = self.data.subtract_mean(copy=False).normalise(method='v',separate=True,copy=False)
+        self.data_segmented = self.data.segment(self.samples, overlap = self.overlap, datalist = 1)
+
+        #print self.other_arrays, self.other_array_labels
 
         self.other_arrays_segmented = []
         for i in self.other_arrays:
@@ -52,8 +55,30 @@ class single_shot_extraction():
         self.fs_values = ['p','a12','H','freq','E']
         for i in self.meta_data: self.misc_data_dict[i]=[]
         for i in self.fs_values: self.misc_data_dict[i]=[]
+        self.misc_data_dict['mirnov_data'] = []
 
-    def get_interesting(self,min_svs = 2, power_cutoff = 0.05):
+    def get_primary_array(self,):
+        data_list = []
+        new_signal_length = 0
+        for i, arr in enumerate(self.array):
+            data_list.append(pf.getDevice('H1').acq.getdata(self.shot, arr).reduce_time([self.start_time, self.end_time]))
+            if i==0:
+                self.timebase = data_list[-1].timebase
+            else:
+                data_list[-1] = data_list[-1].change_time_base(self.timebase)
+            new_signal_length += data_list[-1].signal.shape[0]
+        new_sig = np.zeros((new_signal_length,self.timebase.shape[0]), dtype = float)
+        start_ind = 0
+        self.data = data_list[0]
+        for i in data_list:
+            end_ind = start_ind + i.signal.shape[0]
+            new_sig[start_ind:end_ind, :] = +i.signal
+            start_ind = end_ind
+            self.data.signal = +new_sig
+        #print self.data.signal.shape
+        self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
+
+    def get_interesting(self, min_svs = 2, power_cutoff = 0.05, lower_freq = 0, upper_freq = 2.e6):
         for seg_loc in range(len(self.data_segmented)):
             data_seg = self.data_segmented[seg_loc]
             time_seg_average_time = np.mean([data_seg.timebase[0],data_seg.timebase[-1]])
@@ -72,7 +97,8 @@ class single_shot_extraction():
             #get the valid flucstrucs
             valid_fs = []
             for fs in fs_set:
-                if (fs.p > power_cutoff) and (len(fs.svs()) >= min_svs): valid_fs.append(fs)
+                tmp_valid = (fs.p > power_cutoff) and (len(fs.svs()) >= min_svs) and (fs.freq>lower_freq) and (fs.freq<upper_freq)
+                if tmp_valid: valid_fs.append(fs)
             #extract the useful information from the valid flucstrucs
             for fs in valid_fs:
                 for i in self.fs_values: self.misc_data_dict[i].append(getattr(fs,i))
@@ -84,8 +110,18 @@ class single_shot_extraction():
                         self.misc_data_dict[i].append(None)
                 self.misc_data_dict['RMS'].append((np.mean(self.data.scales**2))**0.5)
                 self.misc_data_dict['time'].append(time_seg_average_time)
+                #self.misc_data_dict['time'] = return_time_values(self.data_fft.timebase, good_indices)
+                #self.misc_data_dict['freq'] = return_non_freq_dependent(self.data_fft.frequency_base,good_indices)
+                #self.get_indices
+                #rel_data = return_values(self.data_fft.signal,good_indices)
+                ind1 = np.argmin(np.abs(self.data_fft.timebase - time_seg_average_time))
+                ind2 = np.argmin(np.abs(self.data_fft.frequency_base - self.misc_data_dict['freq'][-1]))
+                self.misc_data_dict['mirnov_data'].append(self.data_fft.signal[ind1,:,ind2])
+                #self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
+
                 #other array data
                 tmp_loc = np.argmin(np.abs(self.misc_data_dict['freq'][-1]-frequency_base))
+
                 for i,tmp_label in zip(other_arrays_data_fft, self.other_array_labels):
                     if tmp_label[0]!=None: self.misc_data_dict[tmp_label[0]].append((i[:,0]))
                     if tmp_label[1]!=None: self.misc_data_dict[tmp_label[1]].append((i[:,tmp_loc]))
@@ -98,34 +134,34 @@ class single_shot_extraction():
 
 class for_stft(single_shot_extraction):
     def get_data(self,):
-        data_list = []
-        new_signal_length = 0
-        for i, arr in enumerate(self.array):
-            data_list.append(pf.getDevice('H1').acq.getdata(self.shot, arr).reduce_time([self.start_time, self.end_time]))
-            if i==0:
-                self.timebase = data_list[-1].timebase
-            else:
-                data_list[-1] = data_list[-1].change_time_base(self.timebase)
-            new_signal_length += data_list[-1].signal.shape[0]
-        new_sig = np.zeros((new_signal_length,self.timebase.shape[0]), dtype = float)
-        start_ind = 0
-        self.data = data_list[0]
-        for i in data_list:
-            end_ind = start_ind + i.signal.shape[0]
-            new_sig[start_ind:end_ind, :] = +i.signal
-            start_ind = end_ind
-            self.data.signal = +new_sig
-        print self.data.signal.shape
+        # data_list = []
+        # new_signal_length = 0
+        # for i, arr in enumerate(self.array):
+        #     data_list.append(pf.getDevice('H1').acq.getdata(self.shot, arr).reduce_time([self.start_time, self.end_time]))
+        #     if i==0:
+        #         self.timebase = data_list[-1].timebase
+        #     else:
+        #         data_list[-1] = data_list[-1].change_time_base(self.timebase)
+        #     new_signal_length += data_list[-1].signal.shape[0]
+        # new_sig = np.zeros((new_signal_length,self.timebase.shape[0]), dtype = float)
+        # start_ind = 0
+        # self.data = data_list[0]
+        # for i in data_list:
+        #     end_ind = start_ind + i.signal.shape[0]
+        #     new_sig[start_ind:end_ind, :] = +i.signal
+        #     start_ind = end_ind
+        #     self.data.signal = +new_sig
+        # print self.data.signal.shape
+        self.get_primary_array()
         #self.data = pf.getDevice('H1').acq.getdata(self.shot, self.array).reduce_time([self.start_time, self.end_time])
         #self.data = self.data.subtract_mean(copy=False)#.normalise(method='v',separate=True,copy=False)
         #self.timebase = self.data.timebase
 
-        self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
 
         print self.other_arrays, self.other_array_labels
-        if self.other_arrays == None: self.other_array_labels = []
-        if self.other_arrays == None: self.other_arrays = []; 
-        if self.meta_data == None : self.meta_data = []
+        #if self.other_arrays == None: self.other_array_labels = []
+        #if self.other_arrays == None: self.other_arrays = []; 
+        #if self.meta_data == None : self.meta_data = []
 
         self.other_arrays_fft = []
         for i in self.other_arrays:

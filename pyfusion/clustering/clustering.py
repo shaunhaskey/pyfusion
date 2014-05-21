@@ -915,7 +915,7 @@ class clustering_object():
         fig_kh.canvas.draw(); fig_kh.show()
         return fig_kh, ax_kh
 
-    def plot_clusters_phase_lines(self,decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None):
+    def plot_clusters_phase_lines(self,decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, use_instance_array = True):
         '''Plot all the phase lines for the clusters
         Good clusters will show up as dense areas of line
 
@@ -941,9 +941,15 @@ class clustering_object():
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
-                tmp = modtwopi(self.feature_obj.instance_array[current_items,:], offset = 0)
+                if use_instance_array:
+                    tmp = modtwopi(self.feature_obj.instance_array[current_items,:], offset = 0)
+                else:
+                    tmp = np.angle(self.feature_obj.instance_array_amps[current_items,:]/(np.sum(self.feature_obj.instance_array_amps[current_items,:],axis = 1)[:,np.newaxis]))
+                    #tmp = modtwopi(tmp, offset = 0)
+                    
                 #instance_array_complex = np.exp(1j*instance_array)
-                kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
+                #kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*self.feature_obj.instance_array[current_items,:]), lookup=None)
+                kappa_list_tmp, cur_mean, scale_fit1 = EM_VMM_calc_best_fit(np.exp(1j*tmp), lookup=None)
                 cur_mean = modtwopi(cur_mean, offset = 0)
                 #cur_mean = modtwopi(self.cluster_details['EM_VMM_means'][cluster,:], offset = 0)
                 means.append(cur_mean)
@@ -3166,7 +3172,7 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
         #maybe only the random option is valid here.....
         if self.start=='k_means':
             print 'Initialising clusters using a fast k_means run'
-            self.cluster_assignments, self.cluster_details = k_means_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 3, seed=self.seed)
+            self.cluster_assignments, self.cluster_details = k_means_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 4, seed=self.seed)
             for i in list(set(self.cluster_assignments)):
                 self.zij[self.cluster_assignments==i,i] = 1
             #print 'finished initialising'
