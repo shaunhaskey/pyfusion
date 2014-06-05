@@ -75,6 +75,7 @@ class single_shot_extraction():
             new_sig[start_ind:end_ind, :] = +i.signal
             start_ind = end_ind
             self.data.signal = +new_sig
+            self.data.channels.extend(i.channels)
         #print self.data.signal.shape
         self.data_fft = self.data.generate_frequency_series(self.samples,self.samples/self.overlap)
 
@@ -308,7 +309,8 @@ def single_shot_svd_wrapper(input_data):
         tmp = single_shot_extraction(*input_data)
         return copy.deepcopy(tmp.instance_array_list), copy.deepcopy(tmp.misc_data_dict)
         #return single_shot_extraction(*input_data)
-    except Exception, e:
+    #except Exception, e:
+    except None:
         print "!!!!!!!!!!!!!! EXCEPTION"
         print input_data
         print e

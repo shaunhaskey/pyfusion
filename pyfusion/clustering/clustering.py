@@ -369,6 +369,97 @@ class clustering_object():
     attributes instance_array : array of phase differences
 
     SH : 6May2013 '''
+
+    def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None):
+        import h1.diagnostics.magnetics as mag
+        if array == 'HMA':
+            self.arr = mag.HMA()
+            mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+            mask[0] = False
+        elif array == 'PMA1':
+            self.arr = mag.PMA1()
+            mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+            for i in [5,6,11,12,13,14,19]:
+                mask[i-1] = False
+        elif array == 'PMA2':
+            self.arr = mag.PMA2()
+            mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+
+        cluster_list = list(set(self.cluster_assignments))
+        n_clusters = len(cluster_list)
+        misc_data_dict = self.feature_obj.misc_data_dict
+        i = 0
+        cluster_mu = self.cluster_details['EM_VMM_means']
+        fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        fig2, ax2 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        
+        if other_array:
+            foo = self.feature_obj.misc_data_dict[other_array_name]
+            cur_data = np.zeros((foo.shape[0], foo.shape[1]-1), dtype = complex)
+            for i in range(1,foo.shape[1]):
+                cur_data[:,i-1] = foo[:,i]/foo[:,i-1]
+            cur_data = cur_data / np.abs(cur_data)
+        else:
+            foo = self.feature_obj.misc_data_dict['mirnov_data']
+            cur_data = np.zeros((foo.shape[0], foo.shape[1]-1), dtype = complex)
+            for i in range(1,foo.shape[1]):
+                cur_data[:,i-1] = foo[:,i]/foo[:,i-1]
+            cur_data = cur_data / np.abs(cur_data)
+            #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+        for i, cluster in enumerate(cluster_list):
+            current_items = self.cluster_assignments==cluster
+            if other_array:
+                mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
+                loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
+                #loc_tmp = mean
+                print 'MEAN: ', mean, kappa, foo
+            else:
+                #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+                mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
+                loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
+                #loc_tmp = mean
+                print 'MEAN: ', mean, kappa, foo
+                #phases
+                #cur_data = np.exp(1j*self.feature_obj.instance_array[current_items,:])
+                #loc_tmp = cluster_mu[cluster]#[:14]
+            
+            if np.sum(current_items)>10:
+                kh_ave = np.mean(misc_data_dict['kh'][current_items])
+                kh_ave_round = 0.5 * np.round(2.0 * (kh_ave*10)) / 10.
+                kh_ave_round = np.min([kh_ave_round, 0.9])
+                kh_ave_round = np.max([kh_ave_round, 0.1])
+                filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                print filename, kh_ave_round, kh_ave
+                self.arr.loc_boozer_coords(filename)
+                #if array == 'HMA': loc_tmp = loc_tmp[:14]
+                tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+                data = np.zeros(tmp_data.shape[0]+1,dtype = complex)
+                data[1:] = +tmp_data
+                #data = data[::-1]
+                #mask = np.ones(arr.boozer_phi.shape[0], dtype = bool)
+                print '!!!!!!!!!', loc_tmp.shape, mask.shape
+                self.arr.perform_fit(data, mask = mask)
+                #ax2[cluster].plot(loc_tmp)
+                x_ax = np.unwrap(np.deg2rad(self.arr.boozer_phi)) if array == 'HMA' else np.unwrap(np.deg2rad(self.arr.boozer_theta))
+                self.arr.plot_fig(ax = ax[cluster], ax2 = ax2[cluster], mask = mask, ax2_xaxis = x_ax[mask])
+                ax2[cluster].plot(x_ax[mask], np.real(data), '-x')
+                ax2[cluster].plot(x_ax[mask], np.imag(data), '-x')
+                ax2[cluster].grid()
+                #if i==0:hma.dummy_data()
+        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        ax[0].set_xlim([np.min(self.arr.m_rec), np.max(self.arr.m_rec)])
+        ax[0].set_ylim([np.min(self.arr.n_rec), np.max(self.arr.n_rec)])
+        ax2[0].set_xlim([np.min(x_ax),np.max(x_ax)])
+        ax2[0].set_ylim([-1.1,1.1])
+        #fig.suptitle(suptitle,fontsize=8)
+        fig.canvas.draw(); fig.show()
+        fig2.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        #fig.suptitle(suptitle,fontsize=8)
+        fig2.canvas.draw(); fig2.show()
+                
+
+
+
     def plot_kh_freq_all_clusters(self,color_by_cumul_phase = 1):
         '''plot kh vs frequency for each cluster - i.e looking for
         whale tails The colouring of the points is based on the total
@@ -3065,34 +3156,51 @@ class EM_VMM_GMM_clustering_class(clustering_object):
         #L = np.sum(zij[probs>1.e-20]*np.log(probs[probs>1.e-20]))
         #L = np.sum(zij*np.log(np.clip(probs,1.e-10,1)))
 
+def norm_bet_chans(input_data, method = 'sum', reference = 0):
+    '''
+    How to normalise between channels for the clustering - i.e sum,
+    adjacent etc... to remove the problems with different timings
+
+    SRH: 24May2014
+    '''
+    if method == 'sum':
+        output_data = input_data/np.mean(input_data,axis = 1)[:,np.newaxis]
+    elif method == 'adj':
+        instances, dims = input_data.shape
+        output_data = np.ones((instances, dims - 1),dtype=complex)
+        for i in range(1,dims): 
+            output_data[:, i-1] = input_data[:,i]/input_data[:,i-1]
+    elif method == 'ref':
+        output_data = input_data / (input_data[:,0])[:,np.newaxis]
+    elif method == 'adj-self':
+        instances, dims = input_data.shape
+        output_data = np.ones((instances, dims - 1),dtype=complex)
+        for i in range(1,dims): 
+            output_data[:, i-1] = input_data[i,:]/(input_data[:,i-1]+input_data[:,i])
+    return output_data
 
 class EM_GMM_GMM_clustering_class_self(clustering_object):
-    def __init__(self, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, seed=None):
-        '''This model is supposed to include a mixture of Gaussian and von
-        Mises distributions to allow datamining of data that essentially
-        consists of complex numbers (amplitude and phase) such as most
-        Fourier based measurements. Supposed to be an improvement on the
-        case of just using the phases between channels - more interested
-        in complex modes such as HAE, and also looking at data that is
-        more amplitude based such as line of sight chord through the
-        plasma for interferometers and imaging diagnostics.
+    '''
+    This model is uses Gaussian mixtures for the real and imaginary components of the values
 
-        Note the amplitude data is included in
-        misc_data_dict['mirnov_data'] from the stft-clustering
-        extraction technique
+    Args:
+      instance_array_amps (n_instances x n_dims, complex np.array): data used for clustering
 
-        Need to figure out a way to normalise it... so that shapes of
-        different amplitudes will look the same
-        Need to plumb this in somehow...
+    Kwargs:
+      norm_method (str): any of sum, adj, ref, adj-self
+      start (str): any of random, k-means, EM_GMM
 
-        SH: 20May2014
-        '''
+    SH: 20May2014
+    '''
+    def __init__(self, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, seed=None, norm_method = 'sum'):
         print 'EM_GMM_GMM2', instance_array_amps.shape
         self.settings = {'n_clusters':n_clusters,'n_iterations':n_iterations,'n_cpus':n_cpus,'start':start,
                          'kappa_calc':kappa_calc,'hard_assignments':hard_assignments, 'method':'EM_VMM_GMM'}
         #self.instance_array = copy.deepcopy(instance_array)
         self.instance_array_amps = instance_array_amps
-        self.data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
+        self.data_complex = norm_bet_chans(instance_array_amps, method = norm_method)
+
+        #self.data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
         self.input_data = np.hstack((np.real(self.data_complex), np.imag(self.data_complex)))
         self.n_dim = self.data_complex.shape[1]
         self.n_instances, self.n_dimensions = self.input_data.shape
@@ -3104,7 +3212,7 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
         np.random.seed(self.seed)
         self.iteration = 1
 
-        self.initialisation()
+        self._initialisation()
         self.convergence_record = []; converged = 0 
         self.LL_diff = np.inf
         while converged!=1:
@@ -3143,23 +3251,9 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
                                 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_vars_re,
                                 'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_vars_im}
 
-        #cluster_mu = self.cluster_details['EM_GMM_means_re'] + 1j*self.cluster_details['EM_GMM_means_im']
-        #cluster_sigma = self.cluster_details['EM_GMM_variances_re'] + 1j*self.cluster_details['EM_GMM_variances_im']
-
-        # #Extract the means, variances and covariances
-        # gmm_covars = np.array(gmm._get_covars())
-        # gmm_vars = np.array([np.diagonal(i) for i in gmm._get_covars()])
-        # gmm_vars_re, gmm_vars_im = np.hsplit(gmm_vars,2)
-        # gmm_covars_re = np.array([i[0:n_dim,0:n_dim] for i in gmm._get_covars()])
-        # gmm_covars_im = np.array([i[n_dim:,n_dim:] for i in gmm._get_covars()])
-        # gmm_means = gmm.means_
-        # gmm_means_re, gmm_means_im = np.hsplit(gmm_means, 2)
-        # #Bundle up the answer
-        # cluster_details = {'EM_GMM_means':gmm_means, 'EM_GMM_variances':gmm_vars, 'EM_GMM_covariances':gmm_covars, 'EM_GMM_means_re':gmm_means_re, 'EM_GMM_variances_re':gmm_vars_re, 'EM_GMM_covariances_re':gmm_covars_re,'EM_GMM_means_im':gmm_means_im, 'EM_GMM_variances_im':gmm_vars_im, 'EM_GMM_covariances_im':gmm_covars_im,'BIC':bic_value,'LL':LL}
 
 
-
-    def initialisation(self):
+    def _initialisation(self):
         '''This involves generating the mu and kappa arrays
         Then initialising based on self.start using k-means, EM-GMM or
         giving every instance a random probability of belonging to each cluster
@@ -3172,7 +3266,7 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
         #maybe only the random option is valid here.....
         if self.start=='k_means':
             print 'Initialising clusters using a fast k_means run'
-            self.cluster_assignments, self.cluster_details = k_means_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 1, number_of_starts = 4, seed=self.seed)
+            self.cluster_assignments, self.cluster_details = k_means_clustering(self.input_data, n_clusters=self.n_clusters, sin_cos = 0, number_of_starts = 4, seed=self.seed)
             for i in list(set(self.cluster_assignments)):
                 self.zij[self.cluster_assignments==i,i] = 1
             #print 'finished initialising'
@@ -3197,6 +3291,7 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
         for cluster_ident in range(self.n_clusters):
             self.std_list[cluster_ident,:], self.mean_list[cluster_ident,:] = EM_GMM_calc_best_fit(self.input_data, self.zij[:,cluster_ident])
         #Prevent ridiculous situations happening....
+        #self.std_list = np.clip(self.std_list,0.5,300)
         self.std_list = np.clip(self.std_list,0.001,300)
         self._EM_VMM_GMM_check_convergence()
 
