@@ -371,6 +371,10 @@ class clustering_object():
     SH : 6May2013 '''
 
     def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None):
+        '''Supposed to fit a whole bunch of modes to the data for each cluster
+
+        SRH: 6June2014
+        '''
         import h1.diagnostics.magnetics as mag
         if array == 'HMA':
             self.arr = mag.HMA()
@@ -379,83 +383,94 @@ class clustering_object():
         elif array == 'PMA1':
             self.arr = mag.PMA1()
             mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
-            for i in [5,6,11,12,13,14,19]:
+            for i in [5,6,11,12,13,14,19,20]:
                 mask[i-1] = False
         elif array == 'PMA2':
             self.arr = mag.PMA2()
             mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
-
+        elif array == 'PMA1_reduced':
+            print 'hello'
+            self.arr = mag.PMA1()
+            mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+            for i in [5,6,11,12,13,14,19,20]:
+                mask[i-1] = False
+            #self.arr = mag.PMA1_reduced()
+            #mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
         cluster_list = list(set(self.cluster_assignments))
         n_clusters = len(cluster_list)
         misc_data_dict = self.feature_obj.misc_data_dict
-        i = 0
-        cluster_mu = self.cluster_details['EM_VMM_means']
+        if not hasattr(self,'coil_locs'):
+            self.coil_locs = {'HMA':{},'PMA1':{},'PMA2':{}, 'PMA1_reduced':{}}
+        #cluster_mu = self.cluster_details['EM_VMM_means']
         fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         fig2, ax2 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
+        fig3, ax3 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         
-        if other_array:
-            foo = self.feature_obj.misc_data_dict[other_array_name]
-            cur_data = np.zeros((foo.shape[0], foo.shape[1]-1), dtype = complex)
-            for i in range(1,foo.shape[1]):
-                cur_data[:,i-1] = foo[:,i]/foo[:,i-1]
-            cur_data = cur_data / np.abs(cur_data)
-        else:
-            foo = self.feature_obj.misc_data_dict['mirnov_data']
-            cur_data = np.zeros((foo.shape[0], foo.shape[1]-1), dtype = complex)
-            for i in range(1,foo.shape[1]):
-                cur_data[:,i-1] = foo[:,i]/foo[:,i-1]
-            cur_data = cur_data / np.abs(cur_data)
-            #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+        foo = self.feature_obj.misc_data_dict[other_array_name] if other_array else self.feature_obj.misc_data_dict['mirnov_data']
+        #foo = self.feature_obj.misc_data_dict[other_array_name]
+        foo = foo/np.abs(foo)
+        foo2 = foo / np.sum(foo, axis = 1)[:,np.newaxis]
+        cur_data = foo * np.sum(foo2,axis = 1)[:,np.newaxis]
+        #cur_data = np.zeros((foo.shape[0], foo.shape[1]-1), dtype = complex)
+        #for i in range(1,foo.shape[1]): cur_data[:,i-1] = foo[:,i]/foo[:,i-1]
+        self.cluster_mode_fits = {}
         for i, cluster in enumerate(cluster_list):
             current_items = self.cluster_assignments==cluster
-            if other_array:
-                mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
-                loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
-                #loc_tmp = mean
-                print 'MEAN: ', mean, kappa, foo
-            else:
-                #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
-                mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
-                loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
-                #loc_tmp = mean
-                print 'MEAN: ', mean, kappa, foo
-                #phases
-                #cur_data = np.exp(1j*self.feature_obj.instance_array[current_items,:])
-                #loc_tmp = cluster_mu[cluster]#[:14]
-            
+            #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+            mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
+            loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
+            # else:
+            #     #tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
+            #     mean, kappa, foo = EM_VMM_calc_best_fit(cur_data[current_items,:], N=np.sum(current_items))
+            #     loc_tmp = np.angle(np.sum(cur_data[current_items,:], axis = 0))
+            #     #loc_tmp = mean
+            #     print 'MEAN: ', mean, kappa, foo
+            #     #phases
+            #     #cur_data = np.exp(1j*self.feature_obj.instance_array[current_items,:])
+            #     #loc_tmp = cluster_mu[cluster]#[:14]
             if np.sum(current_items)>10:
-                kh_ave = np.mean(misc_data_dict['kh'][current_items])
-                kh_ave_round = 0.5 * np.round(2.0 * (kh_ave*10)) / 10.
-                kh_ave_round = np.min([kh_ave_round, 0.9])
-                kh_ave_round = np.max([kh_ave_round, 0.1])
-                filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
-                print filename, kh_ave_round, kh_ave
-                self.arr.loc_boozer_coords(filename)
-                #if array == 'HMA': loc_tmp = loc_tmp[:14]
+                kh_ave_round = 0.5 * np.round(2.0 * (np.mean(misc_data_dict['kh'][current_items])*10)) / 10.
+                kh_ave_round = np.max([np.min([kh_ave_round, 0.9]),0.1])
+                print kh_ave_round
+                if '{:.3f}'.format(kh_ave_round) in self.coil_locs[array].keys():
+                    self.arr.loc_boozer_coords(filename = None, **self.coil_locs[array]['{:.3f}'.format(kh_ave_round)])
+                    print 'using preused values'
+                else:
+                    filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                    print filename, kh_ave_round
+                    self.arr.loc_boozer_coords(filename = filename)
+                    self.coil_locs[array]['{:.3f}'.format(kh_ave_round)] = {}
+                    for tmp_ind in ['boozer_phi', 'boozer_theta','distance']:self.coil_locs[array]['{:.3f}'.format(kh_ave_round)][tmp_ind] = copy.deepcopy(getattr(self.arr, tmp_ind))
+                
                 tmp_data = np.exp(1j*(np.cumsum(loc_tmp)))
-                data = np.zeros(tmp_data.shape[0]+1,dtype = complex)
-                data[1:] = +tmp_data
+                data = np.mean(np.real(cur_data[current_items,:]), axis = 0) + 1j*np.mean(np.imag(cur_data[current_items,:]), axis = 0)
+                data = data/np.abs(data)
+                #data = np.zeros(tmp_data.shape[0]+1,dtype = complex)
+                #data[1:] = +tmp_data
                 #data = data[::-1]
-                #mask = np.ones(arr.boozer_phi.shape[0], dtype = bool)
-                print '!!!!!!!!!', loc_tmp.shape, mask.shape
-                self.arr.perform_fit(data, mask = mask)
+                self.arr.perform_fit(data, mask = mask, inc_phi = True)
                 #ax2[cluster].plot(loc_tmp)
+                self.cluster_mode_fits[cluster] = copy.deepcopy(self.arr.vals)
                 x_ax = np.unwrap(np.deg2rad(self.arr.boozer_phi)) if array == 'HMA' else np.unwrap(np.deg2rad(self.arr.boozer_theta))
-                self.arr.plot_fig(ax = ax[cluster], ax2 = ax2[cluster], mask = mask, ax2_xaxis = x_ax[mask])
-                ax2[cluster].plot(x_ax[mask], np.real(data), '-x')
-                ax2[cluster].plot(x_ax[mask], np.imag(data), '-x')
+                self.arr.plot_fig(ax = ax[cluster], ax2 = ax2[cluster], mask = mask, ax2_xaxis = x_ax[mask], ax3 = ax3[cluster])
+                ax2[cluster].plot(x_ax[mask], np.real(data), '-bo')
+                ax2[cluster].plot(x_ax[mask], np.imag(data), '-ro')
+                ax3[cluster].plot(np.real(data), np.imag(data), 'r.')
+                for j in range(data.shape[0]): ax3[cluster].text(np.real(data[j]), np.imag(data[j]), str(j+1))
                 ax2[cluster].grid()
-                #if i==0:hma.dummy_data()
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         ax[0].set_xlim([np.min(self.arr.m_rec), np.max(self.arr.m_rec)])
         ax[0].set_ylim([np.min(self.arr.n_rec), np.max(self.arr.n_rec)])
         ax2[0].set_xlim([np.min(x_ax),np.max(x_ax)])
         ax2[0].set_ylim([-1.1,1.1])
-        #fig.suptitle(suptitle,fontsize=8)
         fig.canvas.draw(); fig.show()
         fig2.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        #fig.suptitle(suptitle,fontsize=8)
         fig2.canvas.draw(); fig2.show()
+        ax3[0].set_xlim([np.min(self.arr.m_rec), np.max(self.arr.m_rec)])
+        ax3[0].set_xlim([-1, 1])
+        ax3[0].set_ylim([-1, 1])
+        fig3.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig3.canvas.draw(); fig2.show()
                 
 
 
@@ -1096,20 +1111,33 @@ class clustering_object():
         means = []
         count = 0
         axes_list = []
+        naked_coil_b_par_c = np.array([ 0.83264091,  0.25206197,  0.49312662])
+        naked_coil_b_par_c = np.array([0.25206197, 0.83264091,  0.49312662])
+
+        #I think this is the correct one (blue (x), black (y), grey (z))
+        naked_coil_b_par_c = np.array([0.25206197, 0.83264091,  0.49312662])[::-1]
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
                 tmp = np.abs(self.feature_obj.misc_data_dict['naked_coil'][current_items,:])
                 tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
                 tmp /= np.sqrt(np.sum(tmp**2, axis = 1))[:,np.newaxis]
+                print 'blue, black, grey', np.mean(np.abs(tmp[:,0])), np.mean(np.abs(tmp[:,1])), np.mean(np.abs(tmp[:,2]))
+                b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
+                b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
+                b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
                 plot_ax = ax[cluster] if not ax_supplied else ax[count]
                 #plot_ax.scatter(tmp[:,1], np.sqrt(tmp[:,0]**2 + tmp[:,2]**2), c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
-                plot_ax.scatter(tmp[:,0], tmp2, c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                #plot_ax.scatter(tmp[:,0], tmp2, c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                plot_ax.scatter(b_par, tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                plot_ax.scatter(b_perp_amp, tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                #plot_ax.scatter(b_perp_amp**2+b_par**2, tmp2, c='y', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
                 #plot_ax.scatter(tmp[:,1], tmp[:,0], c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
                 print np.mean(np.sum(tmp**2, axis = 1))
                 axes_list.append(plot_ax)
                 count+=1
-        ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+        #ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+        ax[0].set_xlim([0,1])
         #if not cumul_sum: ax[0].set_ylim([0, 1]); ax[0].set_xlim([0,1])
         for i in ax:i.grid(True)
         if not ax_supplied:
@@ -1441,7 +1469,6 @@ class clustering_object():
             ax[i].hist(curr_probs, bins=300)
         fig.canvas.draw(); fig.show()
 
-
 class clusterer_wrapper(clustering_object):
     '''Wrapper around the EM_GMM_clustering function
     Decided to use a wrapper so that it can be used outside of this architecture if needed
@@ -1493,7 +1520,6 @@ class clusterer_wrapper(clustering_object):
                             'EM_GMM_GMM2' : {'n_clusters':9, 'n_iterations':20, 'n_cpus':1, 'start':'random',
                                             'kappa_calc':'approx','hard_assignments':0,'kappa_converged':0.2,
                                             'mu_converged':0.01,'LL_converged':1.e-4,'min_iterations':10,'verbose':1,'number_of_starts':1}}
-
 
 #EM_GMM_GMM_clustering(instance_array_amps, n_clusters=9, sin_cos = 0, number_of_starts = 10, show_covariances = 0, clim=None, covariance_type='diag')
         #EM_VMM_GMM_clustering_wrapper(instance_array, instance_array_amps, n_clusters = 9, n_iterations = 20, n_cpus=1, start='random', kappa_calc='approx', hard_assignments = 0, kappa_converged = 0.1, mu_converged = 0.01, min_iterations=10, LL_converged = 1.e-4, verbose = 0, number_of_starts = 1):
@@ -2972,7 +2998,12 @@ def EM_GMM_GMM2_clustering_wrapper(instance_array_amps, n_clusters = 9, n_iterat
     else:
         results = map(EM_GMM_GMM2_clustering_wrapper2, input_data_iter)
     LL_results = []
-    for tmp in results: LL_results.append(tmp[1]['LL'][-1])
+    for tmp in results: 
+        print tmp[1]['LL'][-1]
+        if tmp[1]['LL'][-1]!=0:
+            LL_results.append(tmp[1]['LL'][-1])
+        else:
+            LL_results.append(-1.e20)
     print LL_results
     tmp_loc = np.argmax(LL_results)
     return results[tmp_loc]
@@ -3199,8 +3230,8 @@ class EM_GMM_GMM_clustering_class_self(clustering_object):
         #self.instance_array = copy.deepcopy(instance_array)
         self.instance_array_amps = instance_array_amps
         self.data_complex = norm_bet_chans(instance_array_amps, method = norm_method)
-
-        #self.data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
+        print 'hello norm method',  norm_method
+        self.data_complex = instance_array_amps/np.sum(instance_array_amps,axis = 1)[:,np.newaxis]
         self.input_data = np.hstack((np.real(self.data_complex), np.imag(self.data_complex)))
         self.n_dim = self.data_complex.shape[1]
         self.n_instances, self.n_dimensions = self.input_data.shape

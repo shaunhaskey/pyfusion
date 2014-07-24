@@ -191,6 +191,17 @@ def database_of_scans(keyname):
         start_time = 0.004
         end_time = 0.040
 
+    elif keyname=='June16_2014_21inter':
+        shot_list = range(83130,83212+1); 
+        #shot_list2 = range(76810, 76817); 
+        #for i in shot_list2: shot_list.append(i)
+
+        remove_list = [83166,83172]
+        for i in remove_list: shot_list.remove(i)
+        start_time = 0.004
+        end_time = 0.080
+        end_time = 0.040
+
     elif keyname=='aug_2013_antenna_phasing':
         pass
     else:
