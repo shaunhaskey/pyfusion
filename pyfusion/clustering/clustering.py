@@ -1085,13 +1085,13 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None):
+    def plot_clusters_polarisations(self, coil_number = 0, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None):
         '''Plot all the phase lines for the clusters
         Good clusters will show up as dense areas of line
 
         SH: 9May2013
         '''
-        
+        print coil_number
         if scatter_kwargs == None: scatter_kwargs = {'s':100, 'alpha':0.05,'linewidth':'1'}
         ax_supplied = False if ax==None else True
         cluster_list_tmp = list(set(self.cluster_assignments))
@@ -1110,34 +1110,68 @@ class clustering_object():
         marker_list = ['o' for i in colours]
         means = []
         count = 0
-        axes_list = []
-        naked_coil_b_par_c = np.array([ 0.83264091,  0.25206197,  0.49312662])
-        naked_coil_b_par_c = np.array([0.25206197, 0.83264091,  0.49312662])
 
-        #I think this is the correct one (blue (x), black (y), grey (z))
-        naked_coil_b_par_c = np.array([0.25206197, 0.83264091,  0.49312662])[::-1]
+        axes_list = []
+        if not hasattr(self,'hma'):
+            import h1.diagnostics.magnetics as mag
+            self.hma = mag.HMA()
+            kh = 0.5
+            filename = '/home/srh112/code/python/h1_eq_generation/results7/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(np.round(kh/0.05)*0.05, np.round(kh/0.05)*0.05)
+            self.hma.loc_boozer_coords(filename = filename)
+            self.hma.B_unit_vectors(filename = filename)
+
         for cluster in cluster_list:
             current_items = self.cluster_assignments==cluster
             if np.sum(current_items)>10:
-                tmp = np.abs(self.feature_obj.misc_data_dict['naked_coil'][current_items,:])
+                tmp = self.feature_obj.misc_data_dict['naked_coil'][current_items,coil_number*3:coil_number*3+3]
                 tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
-                tmp /= np.sqrt(np.sum(tmp**2, axis = 1))[:,np.newaxis]
-                print 'blue, black, grey', np.mean(np.abs(tmp[:,0])), np.mean(np.abs(tmp[:,1])), np.mean(np.abs(tmp[:,2]))
-                b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
-                b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
-                b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
+                #Should modify they frequency response here
+                freq_mods = tmp*0
+                if coil_number!=0: 
+                    freq_mod_f = [self.hma.transverse_comp_func, self.hma.axial_comp_func, self.hma.transverse_comp_func]
+                else:
+                    freq_mod_f = [self.hma.naked_comp_func, self.hma.naked_comp_func, self.hma.naked_comp_func]
+                for i in range(3):
+                    freq_mods[:,i] = freq_mod_f[i](tmp2)
+                #print np.mean(np.abs(freq_mods), axis = 0)
+                tmp /= freq_mods
+                #normalise the vector - need to be careful because they are complex
+                tmp /= (np.linalg.norm(tmp, axis = 1))[:,np.newaxis]
+                print 'blue, black, grey coil_coords', np.mean(np.abs(tmp),axis = 0)
+                #Move to dB to cartesian coords
+                tmp_cart = tmp*0
+                for ii in range(3):
+                    tmp_cart[:,ii] = np.sum(tmp*(self.hma.orientations[coil_number,ii::3])[np.newaxis,:],axis = 1)
+                print 'blue, black, grey cart_coords ', np.mean(np.abs(tmp_cart),axis = 0)
                 plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                #b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
+                #b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
+                #b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
+                
+                #print b_par, b_perp, b_perp_amp
+                b_par = np.sum(tmp_cart * (self.hma.b_hat_par[coil_number,:])[np.newaxis,:], axis = 1)
+                b_perp_surf = np.sum(tmp_cart * (self.hma.b_hat_perp_in_surf[coil_number,:])[np.newaxis,:], axis = 1)
+                b_perp_perp = np.sum(tmp_cart * (self.hma.b_hat_perp[coil_number,:])[np.newaxis,:], axis = 1)
+
+                #print np.sqrt(np.abs(b_par)**2 + np.abs(b_perp_surf)**2 + np.abs(b_perp_perp)**2)
+                plot_ax.scatter(np.abs(b_par), tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                plot_ax.scatter(np.abs(b_perp_surf), tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                plot_ax.scatter(np.abs(b_perp_perp), tmp2, c='k', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+
+
                 #plot_ax.scatter(tmp[:,1], np.sqrt(tmp[:,0]**2 + tmp[:,2]**2), c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
                 #plot_ax.scatter(tmp[:,0], tmp2, c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
-                plot_ax.scatter(b_par, tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
-                plot_ax.scatter(b_perp_amp, tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                #plot_ax.scatter(b_par, tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                #plot_ax.scatter(b_perp_amp, tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+
                 #plot_ax.scatter(b_perp_amp**2+b_par**2, tmp2, c='y', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
                 #plot_ax.scatter(tmp[:,1], tmp[:,0], c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
-                print np.mean(np.sum(tmp**2, axis = 1))
+                #print np.mean(np.sum(tmp**2, axis = 1))
                 axes_list.append(plot_ax)
                 count+=1
         #ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
         ax[0].set_xlim([0,1])
+        ax[0].set_ylim([0,60000])
         #if not cumul_sum: ax[0].set_ylim([0, 1]); ax[0].set_xlim([0,1])
         for i in ax:i.grid(True)
         if not ax_supplied:
