@@ -1085,7 +1085,7 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, coil_number = 0, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None):
+    def plot_clusters_polarisations(self, coil_number = 0, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1):
         '''Plot all the phase lines for the clusters
         Good clusters will show up as dense areas of line
 
@@ -1120,58 +1120,115 @@ class clustering_object():
             self.hma.loc_boozer_coords(filename = filename)
             self.hma.B_unit_vectors(filename = filename)
 
-        for cluster in cluster_list:
+        def polar_calc(current_items, coil_number):
+            print 'new'
             current_items = self.cluster_assignments==cluster
-            if np.sum(current_items)>10:
-                tmp = self.feature_obj.misc_data_dict['naked_coil'][current_items,coil_number*3:coil_number*3+3]
-                tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
-                #Should modify they frequency response here
-                freq_mods = tmp*0
-                if coil_number!=0: 
-                    freq_mod_f = [self.hma.transverse_comp_func, self.hma.axial_comp_func, self.hma.transverse_comp_func]
-                else:
-                    freq_mod_f = [self.hma.naked_comp_func, self.hma.naked_comp_func, self.hma.naked_comp_func]
-                for i in range(3):
-                    freq_mods[:,i] = freq_mod_f[i](tmp2)
-                #print np.mean(np.abs(freq_mods), axis = 0)
-                tmp /= freq_mods
-                #normalise the vector - need to be careful because they are complex
-                tmp /= (np.linalg.norm(tmp, axis = 1))[:,np.newaxis]
-                print 'blue, black, grey coil_coords', np.mean(np.abs(tmp),axis = 0)
-                #Move to dB to cartesian coords
-                tmp_cart = tmp*0
-                for ii in range(3):
-                    tmp_cart[:,ii] = np.sum(tmp*(self.hma.orientations[coil_number,ii::3])[np.newaxis,:],axis = 1)
-                print 'blue, black, grey cart_coords ', np.mean(np.abs(tmp_cart),axis = 0)
-                plot_ax = ax[cluster] if not ax_supplied else ax[count]
-                #b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
-                #b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
-                #b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
-                
-                #print b_par, b_perp, b_perp_amp
-                b_par = np.sum(tmp_cart * (self.hma.b_hat_par[coil_number,:])[np.newaxis,:], axis = 1)
-                b_perp_surf = np.sum(tmp_cart * (self.hma.b_hat_perp_in_surf[coil_number,:])[np.newaxis,:], axis = 1)
-                b_perp_perp = np.sum(tmp_cart * (self.hma.b_hat_perp[coil_number,:])[np.newaxis,:], axis = 1)
+            tmp = self.feature_obj.misc_data_dict['naked_coil'][current_items,coil_number*3:coil_number*3+3]
+            tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
+            #Should modify they frequency response here
+            freq_mods = tmp*0
+            if coil_number!=0: 
+                freq_mod_f = [self.hma.transverse_comp_func, self.hma.axial_comp_func, self.hma.transverse_comp_func]
+            else:
+                freq_mod_f = [self.hma.naked_comp_func, self.hma.naked_comp_func, self.hma.naked_comp_func]
+            for i in range(3):
+                freq_mods[:,i] = freq_mod_f[i](tmp2)
+            #print np.mean(np.abs(freq_mods), axis = 0)
+            tmp /= freq_mods
+            #normalise the vector - need to be careful because they are complex
+            tmp /= (np.linalg.norm(tmp, axis = 1))[:,np.newaxis]
+            print 'blue, black, grey coil_coords', np.mean(np.abs(tmp),axis = 0)
+            #Move to dB to cartesian coords
+            tmp_cart = tmp*0
+            for ii in range(3):
+                tmp_cart[:,ii] = np.sum(tmp*(self.hma.orientations[coil_number,ii::3])[np.newaxis,:],axis = 1)
+            print 'blue, black, grey cart_coords ', np.mean(np.abs(tmp_cart),axis = 0)
+            #b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
+            #b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
+            #b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
 
-                #print np.sqrt(np.abs(b_par)**2 + np.abs(b_perp_surf)**2 + np.abs(b_perp_perp)**2)
-                plot_ax.scatter(np.abs(b_par), tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                plot_ax.scatter(np.abs(b_perp_surf), tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                plot_ax.scatter(np.abs(b_perp_perp), tmp2, c='k', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+            #print b_par, b_perp, b_perp_amp
+            b_par = np.sum(tmp_cart * (self.hma.b_hat_par[coil_number,:])[np.newaxis,:], axis = 1)
+            b_perp_surf = np.sum(tmp_cart * (self.hma.b_hat_perp_in_surf[coil_number,:])[np.newaxis,:], axis = 1)
+            b_perp_perp = np.sum(tmp_cart * (self.hma.b_hat_perp[coil_number,:])[np.newaxis,:], axis = 1)
+            return b_par, b_perp_surf, b_perp_perp
+        coil_plot = range(0,16,1)
+        #coil_plot = [coil_number]
+        all_same_plot = False
+        polar_plot = True
+        for coil_number in coil_plot:
+            for cluster in cluster_list:
+                current_items = self.cluster_assignments==cluster
+                if np.sum(current_items)>10:
+                    plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                    b_par, b_perp_surf, b_perp_perp = polar_calc(current_items, coil_number)
+                    if all_same_plot:
+                        noise_amp = 0.75
+                        tmp2 = coil_number + (np.random.rand(b_par.shape[0]))*noise_amp - noise_amp/2
+                    else:
+                        tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
+                    
+                    if polar_plot:
+                        #ref = b_par + b_perp_surf + b_perp_perp
+                        ref = b_par
+                        ref = ref/np.abs(ref)
+                        #ref = b_par*0+1
+                        tmp_ang = np.linspace(0,2.*np.pi,100)
+                        for comp, clr in zip([b_perp_surf, b_perp_perp, b_par], ['k','b','r']):
+                            tmp3 = (comp)/ref
+                            plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c=clr, marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
+                            #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),clr)
+                            center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
+                            radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
+                            plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), clr)
+                            plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), clr + 'o')
+                            plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
 
+                        # tmp3 = b_perp_perp/ref
+                        # scatter_plot_vals = np.append(scatter_plot_vals, tmp3)
+                        # clr_vals = np.append(clr_vals,np.array(['k']*len(tmp3)))
+                        # #plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        # tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
+                        # #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),'k')
+                        # center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
+                        # radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
+                        # plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), 'k')
+                        # plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), 'ko')
+                        # plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
 
-                #plot_ax.scatter(tmp[:,1], np.sqrt(tmp[:,0]**2 + tmp[:,2]**2), c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
-                #plot_ax.scatter(tmp[:,0], tmp2, c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
-                #plot_ax.scatter(b_par, tmp2, c='r', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
-                #plot_ax.scatter(b_perp_amp, tmp2, c='b', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
+                        # tmp3 = b_par/ref
+                        # scatter_plot_vals = np.append(scatter_plot_vals, tmp3)
+                        # clr_vals = np.append(clr_vals, np.array(['r']*len(tmp3)))
+                        # #plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        # plot_ax.scatter(np.real(scatter_plot_vals)[::decimate], np.imag(scatter_plot_vals)[::decimate], c=clr_vals, marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        # tmp_ang = np.linspace(0,2.*np.pi,100); tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
+                        # #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),'r')
+                        # center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
+                        # radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
+                        # plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), 'r')
+                        # plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), 'ro')
+                        # plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
 
-                #plot_ax.scatter(b_perp_amp**2+b_par**2, tmp2, c='y', marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
-                #plot_ax.scatter(tmp[:,1], tmp[:,0], c=colours[count], marker=marker_list[count], cmap=None, norm=None, zorder=0, rasterized=True)
-                #print np.mean(np.sum(tmp**2, axis = 1))
-                axes_list.append(plot_ax)
-                count+=1
+                    else:
+                        plot_ax.scatter(np.abs(b_par)[::decimate], tmp2[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        #plot_ax.scatter(np.abs(b_perp_surf)[::decimate], tmp2[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        plot_ax.scatter(np.sqrt((np.abs(b_perp_surf)[::decimate])**2 + (np.abs(b_perp_perp)[::decimate])**2) , tmp2[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        #plot_ax.scatter(np.abs(b_perp_perp)[::decimate], tmp2[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                    axes_list.append(plot_ax)
+                    count+=1
         #ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
         ax[0].set_xlim([0,1])
-        ax[0].set_ylim([0,60000])
+        if all_same_plot:
+            ax[0].set_ylim([-1,17])
+        else:
+            ax[0].set_ylim([0,60000])
+        if polar_plot:
+            for tmp_amp in np.arange(0,1.25,0.25):
+                for i in ax:i.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),'k')
+            ax[0].set_xlim([-1,1])
+            ax[0].set_ylim([-1,1])
+            
         #if not cumul_sum: ax[0].set_ylim([0, 1]); ax[0].set_xlim([0,1])
         for i in ax:i.grid(True)
         if not ax_supplied:
