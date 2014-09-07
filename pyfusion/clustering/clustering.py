@@ -372,8 +372,16 @@ class clustering_object():
 
     def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None):
         '''Supposed to fit a whole bunch of modes to the data for each cluster
+        array can be one of HMA, PMA1, PMA2 or PMA1_reduced
 
-        SRH: 6June2014
+        if other_array is True then the data is obtained from 
+          self.feature_obj.misc_data_dict[other_array_name]
+        instead of the main instance array. Make sure this data exists and is
+        included using 'other_arrays' when extracting the data
+
+        Certain probes are excluded because they are dead or have poor signal 
+        Requires the magnetics part of the h1 module for the probe details
+        SRH: 7Sept2014
         '''
         import h1.diagnostics.magnetics as mag
         if array == 'HMA':
@@ -1085,141 +1093,140 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, coil_number = 0, decimation=1, single_plot = False, kappa_cutoff = None, cumul_sum = False, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1):
-        '''Plot all the phase lines for the clusters
-        Good clusters will show up as dense areas of line
-
-        SH: 9May2013
+    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None):
         '''
-        print coil_number
+        Plot the cluster polarisations
+        coil_numbers : list of probe formers to plot
+        cluster_list: list of clusters to plot
+        ax : supplied axes
+        decimate
+        polar_plot : whether to make a polar plot of the phases or not
+        y_axis: if none it will be versus probe number with some scatter added
+        reference_phase : b_par, b_perp_perp, b_perp_surf
+        noise_amp = amplitude of noise added for scatter if y_axis == None
+        add_perp: add the two perpendicular components to get a total perpendicular amplitude
+
+        SH: 28July2014
+        '''
+        if fig_name == None: fig_name = 'polarisation'
         if scatter_kwargs == None: scatter_kwargs = {'s':100, 'alpha':0.05,'linewidth':'1'}
         ax_supplied = False if ax==None else True
         cluster_list_tmp = list(set(self.cluster_assignments))
         suptitle = self.settings.__str__().replace("'",'').replace("{",'').replace("}",'')
-        n_clusters = len(cluster_list_tmp)
         if cluster_list==None:  cluster_list = cluster_list_tmp
-        if single_plot:
-            if not ax_supplied: fig, ax = pt.subplots(); ax = [ax]*n_clusters
-            if colours == None: colours = ['r','k','b','y','m']*10
-        else:
-            if not ax_supplied: fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
-            if colours == None: colours = ['k']*n_clusters
-        if kappa_cutoff!=None:
-            averages = np.average(self.cluster_details["EM_VMM_kappas"],axis=1)
-            cluster_list = np.arange(len(averages))[averages>kappa_cutoff]
-        marker_list = ['o' for i in colours]
-        means = []
-        count = 0
+        n_clusters = len(cluster_list)
+        if not ax_supplied: fig, ax, ax_unflat = make_grid_subplots(n_clusters, sharex = True, sharey = True, return_unflattened = True)
+        import h1.helper.generic_funcs as gen_funcs
+        if pub_fig: gen_funcs.setup_publication_image(fig, height_prop = 1., single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None)
 
-        axes_list = []
+        if colours == None: colours = ['k']*n_clusters
+        count = 0
+        #Get the eq mag field vector components if they haven't been obtained already
+        #This does not take the different configurations into account....
         if not hasattr(self,'hma'):
             import h1.diagnostics.magnetics as mag
             self.hma = mag.HMA()
-            kh = 0.5
-            filename = '/home/srh112/code/python/h1_eq_generation/results7/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(np.round(kh/0.05)*0.05, np.round(kh/0.05)*0.05)
+            kh = 0.33
+            filename = '/home/srh112/code/python/h1_eq_generation/results_jason6/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(kh, kh)
             self.hma.loc_boozer_coords(filename = filename)
             self.hma.B_unit_vectors(filename = filename)
 
-        def polar_calc(current_items, coil_number):
-            print 'new'
-            current_items = self.cluster_assignments==cluster
-            tmp = self.feature_obj.misc_data_dict['naked_coil'][current_items,coil_number*3:coil_number*3+3]
+        def polar_calc(current_items, coil_number, project = True):
+            #current_items = self.cluster_assignments==cluster
+            print coil_number*3, coil_number*3+3
+            tmp = self.feature_obj.misc_data_dict[data_key][current_items,coil_number*3:coil_number*3+3]
+            #tmp[:,2] = -1*tmp[:,2]
+            #tmp_shape = tmp.shape
+            #tmp = np.random.rand(tmp.shape[0]*tmp.shape[1]) - 0.5 + 1j*(np.random.rand(tmp.shape[0]*tmp.shape[1]) - 0.5)
+            #tmp.resize(tmp_shape)
             tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
             #Should modify they frequency response here
             freq_mods = tmp*0
-            if coil_number!=0: 
-                freq_mod_f = [self.hma.transverse_comp_func, self.hma.axial_comp_func, self.hma.transverse_comp_func]
+            #Different set of frequency responses depending on if it is the naked coil or in the bellows
+            if coil_number!=0:
+                freq_mod_f = [self.hma.hma_transverse_bellows, self.hma.hma_axial_bellows, self.hma.hma_transverse_bellows]
             else:
-                freq_mod_f = [self.hma.naked_comp_func, self.hma.naked_comp_func, self.hma.naked_comp_func]
-            for i in range(3):
-                freq_mods[:,i] = freq_mod_f[i](tmp2)
-            #print np.mean(np.abs(freq_mods), axis = 0)
+                freq_mod_f = [self.hma.hma_no_bellows, self.hma.hma_no_bellows, self.hma.hma_no_bellows,]
+            #make an array the same size as the probe data to frequency correct
+            for i in range(3):freq_mods[:,i] = freq_mod_f[i](tmp2)
+            print '####', coil_number, cluster
+            print np.mean(np.abs(freq_mods), axis = 0), np.mean(tmp2), np.std(tmp2)
+            print np.rad2deg(np.angle(np.sum(freq_mods, axis = 0)))
+            
             tmp /= freq_mods
             #normalise the vector - need to be careful because they are complex
-            tmp /= (np.linalg.norm(tmp, axis = 1))[:,np.newaxis]
-            print 'blue, black, grey coil_coords', np.mean(np.abs(tmp),axis = 0)
-            #Move to dB to cartesian coords
+            norms = (np.linalg.norm(tmp, axis = 1))
+            tmp /= norms[:,np.newaxis]
+            self.norms = norms
+            #print 'blue, black, grey coil_coords', np.mean(np.abs(tmp),axis = 0)
+            #Move to cartesian coords
             tmp_cart = tmp*0
-            for ii in range(3):
-                tmp_cart[:,ii] = np.sum(tmp*(self.hma.orientations[coil_number,ii::3])[np.newaxis,:],axis = 1)
-            print 'blue, black, grey cart_coords ', np.mean(np.abs(tmp_cart),axis = 0)
-            #b_par = np.sum(tmp * naked_coil_b_par_c[np.newaxis,:], axis = 1)
-            #b_perp = tmp - b_par[:,np.newaxis] * naked_coil_b_par_c[np.newaxis,:]
-            #b_perp_amp = np.sqrt(np.sum(b_perp**2,axis = 1))
-
-            #print b_par, b_perp, b_perp_amp
-            b_par = np.sum(tmp_cart * (self.hma.b_hat_par[coil_number,:])[np.newaxis,:], axis = 1)
-            b_perp_surf = np.sum(tmp_cart * (self.hma.b_hat_perp_in_surf[coil_number,:])[np.newaxis,:], axis = 1)
-            b_perp_perp = np.sum(tmp_cart * (self.hma.b_hat_perp[coil_number,:])[np.newaxis,:], axis = 1)
-            return b_par, b_perp_surf, b_perp_perp
-        coil_plot = range(0,16,1)
-        #coil_plot = [coil_number]
-        all_same_plot = False
-        polar_plot = True
-        for coil_number in coil_plot:
+            #The following coordinate transformations can probably be changed into simpler dot products between matrices...
+            for ii in range(3):tmp_cart[:,ii] = np.sum(tmp*(self.hma.orientations[coil_number,ii::3])[np.newaxis,:],axis = 1)
+            #print 'blue, black, grey cart_coords ', np.mean(np.abs(tmp_cart),axis = 0)
+            if project:
+                self.b_par = np.sum(tmp_cart * (self.hma.b_hat_par[coil_number,:])[np.newaxis,:], axis = 1)
+                self.b_perp_surf = np.sum(tmp_cart * (self.hma.b_hat_perp_in_surf[coil_number,:])[np.newaxis,:], axis = 1)
+                self.b_perp_perp = np.sum(tmp_cart * (self.hma.b_hat_perp[coil_number,:])[np.newaxis,:], axis = 1)
+            else:
+                self.b_par = tmp[:,1]
+                self.b_perp_surf = tmp[:,2]
+                self.b_perp_perp = tmp[:,0]
+            #return b_par, b_perp_surf, b_perp_perp
+        if coil_numbers == None: coil_numbers = range(0,16,1)
+        tmp_ang = np.linspace(0,2.*np.pi,100)
+        amps = np.zeros((len(cluster_list),len(coil_numbers)),dtype = float)
+        for coil_number in coil_numbers:
+            count = 0
             for cluster in cluster_list:
                 current_items = self.cluster_assignments==cluster
                 if np.sum(current_items)>10:
-                    plot_ax = ax[cluster] if not ax_supplied else ax[count]
-                    b_par, b_perp_surf, b_perp_perp = polar_calc(current_items, coil_number)
-                    if all_same_plot:
-                        noise_amp = 0.75
-                        tmp2 = coil_number + (np.random.rand(b_par.shape[0]))*noise_amp - noise_amp/2
+                    #plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                    plot_ax = ax[count]
+                    #self.b_par, self.b_perp_surf, self.b_perp_perp = polar_calc(current_items, coil_number)
+                    polar_calc(current_items, coil_number, project = True)
+                    amps[cluster,coil_number] = np.sum(self.norms)
+                    if y_axis == None:
+                        y_ax_data = coil_number + (np.random.rand(self.b_par.shape[0]))*noise_amp - noise_amp/2
                     else:
-                        tmp2 = self.feature_obj.misc_data_dict['freq'][current_items]
-                    
+                        y_ax_data = self.feature_obj.misc_data_dict[y_axis][current_items]
                     if polar_plot:
-                        #ref = b_par + b_perp_surf + b_perp_perp
-                        ref = b_par
+                        #use a reference for the phase, and make sure to normalize it so it doesn't affect amplitudes
+                        ref = getattr(self,reference_phase)
                         ref = ref/np.abs(ref)
-                        #ref = b_par*0+1
-                        tmp_ang = np.linspace(0,2.*np.pi,100)
-                        for comp, clr in zip([b_perp_surf, b_perp_perp, b_par], ['k','b','r']):
+                        for comp, clr in zip([self.b_perp_surf, self.b_perp_perp, self.b_par], ['k','b','r']):
+                            if np.allclose(getattr(self,reference_phase), comp):
+                                tmp_amp = np.std(np.abs(comp))*3
+                                #phase_noise = (np.random.rand(self.b_par.shape[0]))*tmp__amp - tmp_amp/2
+                                noise_x = (np.random.rand(self.b_par.shape[0]))*tmp_amp - tmp_amp/2
+                                noise_y = (np.random.rand(self.b_par.shape[0]))*tmp_amp - tmp_amp/2
+                                noise_x = noise_x[::decimate]
+                                noise_y = noise_y[::decimate]
+                            else:
+                                noise_x = 0
+                                noise_y = 0
                             tmp3 = (comp)/ref
-                            plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c=clr, marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                            tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
-                            #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),clr)
+                            plot_ax.scatter(np.real(tmp3)[::decimate]+ noise_x, np.imag(tmp3)[::decimate]+ noise_y, c=clr, marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.1)
                             center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
                             radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
-                            plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), clr)
-                            plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), clr + 'o')
-                            plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
-
-                        # tmp3 = b_perp_perp/ref
-                        # scatter_plot_vals = np.append(scatter_plot_vals, tmp3)
-                        # clr_vals = np.append(clr_vals,np.array(['k']*len(tmp3)))
-                        # #plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        # tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
-                        # #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),'k')
-                        # center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
-                        # radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
-                        # plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), 'k')
-                        # plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), 'ko')
-                        # plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
-
-                        # tmp3 = b_par/ref
-                        # scatter_plot_vals = np.append(scatter_plot_vals, tmp3)
-                        # clr_vals = np.append(clr_vals, np.array(['r']*len(tmp3)))
-                        # #plot_ax.scatter(np.real(tmp3)[::decimate], np.imag(tmp3)[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        # plot_ax.scatter(np.real(scatter_plot_vals)[::decimate], np.imag(scatter_plot_vals)[::decimate], c=clr_vals, marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        # tmp_ang = np.linspace(0,2.*np.pi,100); tmp_amp = np.sum(np.abs(tmp3))/len(tmp3)
-                        # #plot_ax.plot(tmp_amp*np.cos(tmp_ang), tmp_amp*np.sin(tmp_ang),'r')
-                        # center = [np.mean(np.real(tmp3)), np.mean(np.imag(tmp3))]
-                        # radius = np.sqrt(np.std(np.real(tmp3))**2+np.std(np.imag(tmp3))**2)
-                        # plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), 'r')
-                        # plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), 'ro')
-                        # plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
-
+                            if plot_circle:plot_ax.plot(center[0] + radius*np.cos(tmp_ang), center[1]+radius*np.sin(tmp_ang), clr)
+                            if plot_center:plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), clr + 'o')
+                            if plot_text:plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
                     else:
-                        plot_ax.scatter(np.abs(b_par)[::decimate], tmp2[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        #plot_ax.scatter(np.abs(b_perp_surf)[::decimate], tmp2[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        plot_ax.scatter(np.sqrt((np.abs(b_perp_surf)[::decimate])**2 + (np.abs(b_perp_perp)[::decimate])**2) , tmp2[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                        #plot_ax.scatter(np.abs(b_perp_perp)[::decimate], tmp2[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                    axes_list.append(plot_ax)
+                        plot_ax.scatter(np.abs(self.b_par)[::decimate], y_ax_data[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        if add_perp:
+                            combined = np.array([self.b_perp_surf[::decimate], self.b_perp_perp[::decimate]]).T
+                            plot_ax.scatter(np.linalg.norm(combined, axis = 1), y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        else:
+                            plot_ax.scatter(np.abs(self.b_perp_surf)[::decimate], y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            plot_ax.scatter(np.abs(self.b_perp_perp)[::decimate], y_ax_data[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
                     count+=1
-        #ax[0].set_xlim([0,self.cluster_details['EM_VMM_means'].shape[1]])
+        count = 0
+        for cluster in cluster_list:
+            ax[count].plot(amps[cluster,:]/np.max(amps[cluster,:]), coil_numbers, 'xb-')
+            count+=1
         ax[0].set_xlim([0,1])
-        if all_same_plot:
+        if y_axis == None:
             ax[0].set_ylim([-1,17])
         else:
             ax[0].set_ylim([0,60000])
@@ -1231,12 +1238,18 @@ class clustering_object():
             
         #if not cumul_sum: ax[0].set_ylim([0, 1]); ax[0].set_xlim([0,1])
         for i in ax:i.grid(True)
-        if not ax_supplied:
+        if pub_fig:
+            xlab, ylab = ['Imag', 'Real'] if polar_plot else ['Normalised Amplitude','Coil Number']
+            for i in ax_unflat[:,0]: i.set_ylabel(ylab)
+            for i in ax_unflat[-1,:]: i.set_xlabel(xlab)
+            fig.subplots_adjust(hspace=0.3, wspace=0.15,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig.tight_layout(pad = 0.3)
+            for i in ['pdf','svg','eps']:fig.savefig('{}.{}'.format(fig_name, i))
+        if not ax_supplied and not pub_fig:
             fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
             fig.suptitle(suptitle.replace('_','-'), fontsize = 8)
             fig.canvas.draw(); fig.show()
             return fig, ax
-
 
     
     def plot_clusters_amp_lines(self,decimation=1):
@@ -1478,6 +1491,7 @@ class clustering_object():
             plot_alfven_lines_func(ax[0])
         ax[-1].set_xlim([0.201,0.99])
         ax[0].set_xlabel(r'$\kappa_H$')
+        ax[0].grid()
         #ax[0].set_ylabel(r'$\omega \sqrt{n_e}$')
         ax[0].set_ylabel('Frequency (kHz)')
         if xlim!=None: ax[0].set_xlim(xlim)
@@ -2990,7 +3004,7 @@ def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, m
     feat_obj.clustered_objects.append(tmp)
     return feat_obj
 
-def make_grid_subplots(n_subplots, sharex = True, sharey = True):
+def make_grid_subplots(n_subplots, sharex = True, sharey = True, return_unflattened = False):
     '''This helper function generates the many subplots
     on a regular grid
 
@@ -3001,9 +3015,12 @@ def make_grid_subplots(n_subplots, sharex = True, sharey = True):
         n_rows = n_subplots/n_cols + 1
     else:
         n_rows = n_subplots/n_cols
-    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey = True); ax = ax.flatten()
+    fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey = True); ax_flat = ax.flatten()
     #fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols,subplot_kw=dict(projection='polar')); ax = ax.flatten()
-    return fig, ax
+    if not return_unflattened:
+        return fig, ax_flat
+    else:
+        return fig, ax_flat, ax
 
 def modtwopi(x, offset=np.pi):
     """ return an angle in the range of offset +-
