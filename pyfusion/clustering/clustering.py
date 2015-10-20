@@ -370,7 +370,7 @@ class clustering_object():
 
     SH : 6May2013 '''
 
-    def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None):
+    def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None, boozer_files_location='/home/srh112/code/python/h1_eq_generation/results_jason6/'):
         '''Supposed to fit a whole bunch of modes to the data for each cluster
         array can be one of HMA, PMA1, PMA2 or PMA1_reduced
 
@@ -383,10 +383,12 @@ class clustering_object():
         Requires the magnetics part of the h1 module for the probe details
         SRH: 7Sept2014
         '''
+        
         import h1.diagnostics.magnetics as mag
         if array == 'HMA':
             self.arr = mag.HMA()
             mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+            #exclude the naked coil
             mask[0] = False
         elif array == 'PMA1':
             self.arr = mag.PMA1()
@@ -444,7 +446,10 @@ class clustering_object():
                     self.arr.loc_boozer_coords(filename = None, **self.coil_locs[array]['{:.3f}'.format(kh_ave_round)])
                     print 'using preused values'
                 else:
-                    filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                    avail = np.array([0.33,0.37,0.44,0.63,0.69,0.83])
+                    loc = np.argmin(np.abs(kh_ave_round - avail))
+                    #filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                    filename  = '{}/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(boozer_files_location, avail[loc], avail[loc])
                     print filename, kh_ave_round
                     self.arr.loc_boozer_coords(filename = filename)
                     self.coil_locs[array]['{:.3f}'.format(kh_ave_round)] = {}
@@ -466,6 +471,14 @@ class clustering_object():
                 ax3[cluster].plot(np.real(data), np.imag(data), 'r.')
                 for j in range(data.shape[0]): ax3[cluster].text(np.real(data[j]), np.imag(data[j]), str(j+1))
                 ax2[cluster].grid()
+
+        self.cluster_mode_fits['m'] = copy.deepcopy(self.arr.m_rec)
+        self.cluster_mode_fits['n'] = copy.deepcopy(self.arr.n_rec)
+        if not hasattr(self,'all_cluster_mode_fits'):
+            print('all_cluster_mode_fits does not exist, creating it')
+            self.all_cluster_mode_fits = {}
+        self.all_cluster_mode_fits[array] = copy.deepcopy(self.cluster_mode_fits)
+
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         ax[0].set_xlim([np.min(self.arr.m_rec), np.max(self.arr.m_rec)])
         ax[0].set_ylim([np.min(self.arr.n_rec), np.max(self.arr.n_rec)])
@@ -479,7 +492,6 @@ class clustering_object():
         ax3[0].set_ylim([-1, 1])
         fig3.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         fig3.canvas.draw(); fig2.show()
-                
 
 
 
@@ -1093,7 +1105,7 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None):
+    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None, inc_title = False, energy = False, plot_amps = False, plot_distance = False):
         '''
         Plot the cluster polarisations
         coil_numbers : list of probe formers to plot
@@ -1105,6 +1117,8 @@ class clustering_object():
         reference_phase : b_par, b_perp_perp, b_perp_surf
         noise_amp = amplitude of noise added for scatter if y_axis == None
         add_perp: add the two perpendicular components to get a total perpendicular amplitude
+        plot_distance: plot distance to LCFS for the probes
+        energy [True, False]: plot B**2
 
         SH: 28July2014
         '''
@@ -1175,13 +1189,31 @@ class clustering_object():
             #return b_par, b_perp_surf, b_perp_perp
         if coil_numbers == None: coil_numbers = range(0,16,1)
         tmp_ang = np.linspace(0,2.*np.pi,100)
-        amps = np.zeros((len(cluster_list),len(coil_numbers)),dtype = float)
+        #amps = np.zeros((len(cluster_list),len(coil_numbers)),dtype = float)
+        amps = np.zeros((len(cluster_list_tmp),len(coil_numbers)),dtype = float)
+        amps = np.zeros((len(cluster_list_tmp),16),dtype = float)
+        #if len(coil_numbers) == 1 :amps = amps[:,np.newaxis]
+        hma_dict = {}
         for coil_number in coil_numbers:
             count = 0
             for cluster in cluster_list:
                 current_items = self.cluster_assignments==cluster
                 if np.sum(current_items)>10:
                     #plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                    if cluster in hma_dict.keys():
+                        self.hma = hma_dict[cluster]
+                    else:
+                        import h1.diagnostics.magnetics as mag
+                        hma_dict[cluster] = mag.HMA()
+                        kh = np.mean(self.feature_obj.misc_data_dict['kh'][current_items])
+                        print '!!!!!', kh
+                        #kh = 0.33
+                        avail = np.array([0.33,0.37,0.44,0.63,0.69,0.83])
+                        loc = np.argmin(np.abs(kh - avail))
+                        filename  = '/home/srh112/code/python/h1_eq_generation/results_jason6/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(avail[loc], avail[loc])
+                        #filename = '/home/srh112/code/python/h1_eq_generation/results_jason6/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(kh, kh)
+                        hma_dict[cluster].loc_boozer_coords(filename = filename)
+                        hma_dict[cluster].B_unit_vectors(filename = filename)
                     plot_ax = ax[count]
                     #self.b_par, self.b_perp_surf, self.b_perp_perp = polar_calc(current_items, coil_number)
                     polar_calc(current_items, coil_number, project = True)
@@ -1213,17 +1245,30 @@ class clustering_object():
                             if plot_center:plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), clr + 'o')
                             if plot_text:plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
                     else:
-                        plot_ax.scatter(np.abs(self.b_par)[::decimate], y_ax_data[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        tmp_vals = np.abs(self.b_par)[::decimate]
+                        if energy:tmp_vals = tmp_vals **2
+                        plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
                         if add_perp:
-                            combined = np.array([self.b_perp_surf[::decimate], self.b_perp_perp[::decimate]]).T
-                            plot_ax.scatter(np.linalg.norm(combined, axis = 1), y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            combined = np.linalg.norm(np.array([self.b_perp_surf[::decimate], self.b_perp_perp[::decimate]]).T, axis = 1)
+                            if energy:combined = combined **2
+                            #plot_ax.scatter(np.linalg.norm(combined, axis = 1), y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            plot_ax.scatter(combined, y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
                         else:
-                            plot_ax.scatter(np.abs(self.b_perp_surf)[::decimate], y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                            plot_ax.scatter(np.abs(self.b_perp_perp)[::decimate], y_ax_data[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_vals = np.abs(self.b_perp_surf)[::decimate]
+                            if energy:tmp_vals = tmp_vals **2
+                            plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_vals = np.abs(self.b_perp_perp)[::decimate]
+                            if energy:tmp_vals = tmp_vals **2
+                            plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                    if inc_title: plot_ax.set_title('Cluster {}'.format(count + 1))
                     count+=1
         count = 0
         for cluster in cluster_list:
-            ax[count].plot(amps[cluster,:]/np.max(amps[cluster,:]), coil_numbers, 'xb-')
+            if plot_amps: ax[count].plot(amps[cluster,:]/np.max(amps[cluster,:]), coil_numbers, 'xb-')
+            
+            if plot_distance: 
+                vals = (self.hma.distance - np.min(self.hma.distance)) * 1./(np.max(self.hma.distance) - np.min(self.hma.distance))
+                ax[count].plot(1 - vals, coil_numbers, 'ok-')
             count+=1
         ax[0].set_xlim([0,1])
         if y_axis == None:
@@ -1240,6 +1285,7 @@ class clustering_object():
         for i in ax:i.grid(True)
         if pub_fig:
             xlab, ylab = ['Imag', 'Real'] if polar_plot else ['Normalised Amplitude','Coil Number']
+            if energy and not polar_plot: xlab = 'Energy (a.u)'
             for i in ax_unflat[:,0]: i.set_ylabel(ylab)
             for i in ax_unflat[-1,:]: i.set_xlabel(xlab)
             fig.subplots_adjust(hspace=0.3, wspace=0.15,left=0.05, bottom=0.05,top=0.95, right=0.95)
@@ -1592,7 +1638,7 @@ class clusterer_wrapper(clustering_object):
 
     SH: 6May2013
     '''
-    def __init__(self, feature_obj, method='k-means',comment='', **kwargs):
+    def __init__(self, feature_obj, method='k_means',comment='', **kwargs):
         self.feature_obj = feature_obj
         #print 'kwargs', kwargs
         #Default settings are declared first, which are overwritten by kwargs
