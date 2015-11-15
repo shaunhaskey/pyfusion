@@ -363,7 +363,6 @@ class feature_object():
             print i, clust.settings
             
 
-        
 class clustering_object():
     '''Generic clustering_object, this will have the following
     attributes instance_array : array of phase differences
@@ -415,7 +414,6 @@ class clustering_object():
         fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         fig2, ax2 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         fig3, ax3 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
-        
         foo = self.feature_obj.misc_data_dict[other_array_name] if other_array else self.feature_obj.misc_data_dict['mirnov_data']
         #foo = self.feature_obj.misc_data_dict[other_array_name]
         foo = foo/np.abs(foo)
