@@ -387,6 +387,7 @@ class clustering_object():
         if array == 'HMA':
             self.arr = mag.HMA()
             mask = np.ones(self.arr.cart_x.shape[0], dtype = bool)
+            #exclude the naked coil
             mask[0] = False
         elif array == 'PMA1':
             self.arr = mag.PMA1()
@@ -444,7 +445,11 @@ class clustering_object():
                     self.arr.loc_boozer_coords(filename = None, **self.coil_locs[array]['{:.3f}'.format(kh_ave_round)])
                     print 'using preused values'
                 else:
-                    filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                    avail = np.array([0.33,0.37,0.44,0.63,0.69,0.83])
+                    loc = np.argmin(np.abs(kh_ave_round - avail))
+                    #filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
+                    HOME = os.environ['HOME']
+                    filename  = HOME + '/code/python/h1_eq_generation/results_jason6/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(avail[loc], avail[loc])
                     print filename, kh_ave_round
                     self.arr.loc_boozer_coords(filename = filename)
                     self.coil_locs[array]['{:.3f}'.format(kh_ave_round)] = {}
@@ -1093,7 +1098,7 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None):
+    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None, inc_title = False, energy = False, plot_amps = False, plot_distance = False, titles = None, angle_error=10):
         '''
         Plot the cluster polarisations
         coil_numbers : list of probe formers to plot
@@ -1105,6 +1110,8 @@ class clustering_object():
         reference_phase : b_par, b_perp_perp, b_perp_surf
         noise_amp = amplitude of noise added for scatter if y_axis == None
         add_perp: add the two perpendicular components to get a total perpendicular amplitude
+        plot_distance: plot distance to LCFS for the probes
+        energy [True, False]: plot B**2
 
         SH: 28July2014
         '''
@@ -1116,8 +1123,15 @@ class clustering_object():
         if cluster_list==None:  cluster_list = cluster_list_tmp
         n_clusters = len(cluster_list)
         if not ax_supplied: fig, ax, ax_unflat = make_grid_subplots(n_clusters, sharex = True, sharey = True, return_unflattened = True)
+
+        #Divide by two for +-
+        angle_error = np.deg2rad(angle_error)/2.
+        if len(np.array(ax_unflat).shape)==1:
+            ax_unflat = np.array(ax_unflat)[np.newaxis,:]
+        else:
+            ax_unflat = np.array(ax_unflat)
         import h1.helper.generic_funcs as gen_funcs
-        if pub_fig: gen_funcs.setup_publication_image(fig, height_prop = 1., single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None)
+        if pub_fig: gen_funcs.setup_publication_image(fig, height_prop = 0.2+0.8*(ax_unflat.shape[0]/2.), single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None)
 
         if colours == None: colours = ['k']*n_clusters
         count = 0
@@ -1126,10 +1140,12 @@ class clustering_object():
         if not hasattr(self,'hma'):
             import h1.diagnostics.magnetics as mag
             self.hma = mag.HMA()
-            kh = 0.33
-            filename = '/home/srh112/code/python/h1_eq_generation/results_jason6/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(kh, kh)
-            self.hma.loc_boozer_coords(filename = filename)
-            self.hma.B_unit_vectors(filename = filename)
+            #Why is the hard coded in here? SRH:6July2015
+            #kh = 0.33
+            #HOME = os.environ['HOME']
+            #filename = HOME + '/code/python/h1_eq_generation/results_jason6/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(kh, kh)
+            #self.hma.loc_boozer_coords(filename = filename)
+            #self.hma.B_unit_vectors(filename = filename)
 
         def polar_calc(current_items, coil_number, project = True):
             #current_items = self.cluster_assignments==cluster
@@ -1175,13 +1191,39 @@ class clustering_object():
             #return b_par, b_perp_surf, b_perp_perp
         if coil_numbers == None: coil_numbers = range(0,16,1)
         tmp_ang = np.linspace(0,2.*np.pi,100)
-        amps = np.zeros((len(cluster_list),len(coil_numbers)),dtype = float)
+        #amps = np.zeros((len(cluster_list),len(coil_numbers)),dtype = float)
+        amps = np.zeros((len(cluster_list_tmp),len(coil_numbers)),dtype = float)
+        amps = np.zeros((len(cluster_list_tmp),16),dtype = float)
+        #if len(coil_numbers) == 1 :amps = amps[:,np.newaxis]
+        hma_dict = {}
+        error_bar_data ={}
+        error_bar_data[count] = {}
+        for count in range(len(cluster_list)):
+            error_bar_data[count] = {}
+            for tmp_name in ['combined','par','perp_surf','perp_perp']:
+                error_bar_data[count][tmp_name] = {'x_val':[],'y_val':[],'low_err':[], 'upper_err':[]}
         for coil_number in coil_numbers:
             count = 0
             for cluster in cluster_list:
                 current_items = self.cluster_assignments==cluster
                 if np.sum(current_items)>10:
                     #plot_ax = ax[cluster] if not ax_supplied else ax[count]
+                    if cluster in hma_dict.keys():
+                        self.hma = hma_dict[cluster]
+                    else:
+                        import h1.diagnostics.magnetics as mag
+                        hma_dict[cluster] = mag.HMA()
+                        kh = np.mean(self.feature_obj.misc_data_dict['kh'][current_items])
+                        print '!!!!!', kh
+                        #kh = 0.33
+                        avail = np.array([0.33,0.37,0.44,0.63,0.69,0.83])
+                        loc = np.argmin(np.abs(kh - avail))
+                        HOME = os.environ['HOME']
+                        filename  = HOME + '/code/python/h1_eq_generation/results_jason6/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(avail[loc], avail[loc])
+                        #filename = '/home/srh112/code/python/h1_eq_generation/results_jason6/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(kh, kh)
+                        hma_dict[cluster].loc_boozer_coords(filename = filename)
+                        hma_dict[cluster].B_unit_vectors(filename = filename)
+                        self.hma = hma_dict[cluster]
                     plot_ax = ax[count]
                     #self.b_par, self.b_perp_surf, self.b_perp_perp = polar_calc(current_items, coil_number)
                     polar_calc(current_items, coil_number, project = True)
@@ -1213,17 +1255,79 @@ class clustering_object():
                             if plot_center:plot_ax.plot(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), clr + 'o')
                             if plot_text:plot_ax.text(np.mean(np.real(tmp3)), np.mean(np.imag(tmp3)), '{}'.format(coil_number))
                     else:
-                        plot_ax.scatter(np.abs(self.b_par)[::decimate], y_ax_data[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        tmp_vals = np.abs(self.b_par)[::decimate]
+                        if energy:tmp_vals = tmp_vals **2
+                        plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='r', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                        #x_err = np.std(tmp_vals)
+                        #plot_ax.errorbar(np.mean(tmp_vals), np.mean(y_ax_data[::decimate]),xerr= x_err, fmt = 'x',ecolor='y')
+                        ang = np.arccos(np.mean(tmp_vals))
+                        #error = np.max(np.abs(np.array([np.cos(ang-angle_error), np.cos(ang+angle_error)]) - np.mean(tmp_vals)))
+                        #plot_ax.errorbar([np.mean(tmp_vals)], [np.mean(y_ax_data[::decimate])], xerr=error, ecolor='k', color='k')
+                        tmp_ind = error_bar_data[count]['par']
+                        tmp_ind['x_val'].append(np.mean(tmp_vals))
+                        tmp_ind['y_val'].append(np.mean(y_ax_data[::decimate]))
+                        tmp_ind['low_err'].append(np.abs(np.cos(ang-angle_error) - np.mean(tmp_vals)))
+                        tmp_ind['upper_err'].append(np.abs(np.cos(ang+angle_error) - np.mean(tmp_vals)))
+
                         if add_perp:
-                            combined = np.array([self.b_perp_surf[::decimate], self.b_perp_perp[::decimate]]).T
-                            plot_ax.scatter(np.linalg.norm(combined, axis = 1), y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            combined = np.linalg.norm(np.array([self.b_perp_surf[::decimate], self.b_perp_perp[::decimate]]).T, axis = 1)
+                            if energy:combined = combined **2
+                            #plot_ax.scatter(np.linalg.norm(combined, axis = 1), y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            plot_ax.scatter(combined, y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            #x_err = np.std(tmp_vals)
+                            #plot_ax.errorbar(np.mean(combined), np.mean(y_ax_data[::decimate]),xerr=x_err, ecolor='y',fmt='x')
+                            ang = np.arccos(np.mean(combined))
+                            #error = np.max(np.abs(np.array([np.cos(ang-angle_error), np.cos(ang+angle_error)]) - np.mean(combined)))
+                            #plot_ax.errorbar([np.mean(combined)], [np.mean(y_ax_data[::decimate])],xerr=error,ecolor='k', color='k')
+                            tmp_ind = error_bar_data[count]['combined']
+                            tmp_ind['x_val'].append(np.mean(combined))
+                            tmp_ind['y_val'].append(np.mean(y_ax_data[::decimate]))
+                            tmp_ind['low_err'].append(np.abs(np.cos(ang-angle_error) - np.mean(combined)))
+                            tmp_ind['upper_err'].append(np.abs(np.cos(ang+angle_error) - np.mean(combined)))
+
                         else:
-                            plot_ax.scatter(np.abs(self.b_perp_surf)[::decimate], y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
-                            plot_ax.scatter(np.abs(self.b_perp_perp)[::decimate], y_ax_data[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_vals = np.abs(self.b_perp_surf)[::decimate]
+                            if energy:tmp_vals = tmp_vals **2
+                            plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='b', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_ind = error_bar_data[count]['perp_surf']
+                            tmp_ind['x_val'].append(np.mean(tmp_vals))
+                            tmp_ind['y_val'].append(np.mean(y_ax_data[::decimate]))
+                            tmp_ind['low_err'].append(np.abs(np.cos(ang-angle_error) - np.mean(tmp_vals)))
+                            tmp_ind['upper_err'].append(np.abs(np.cos(ang+angle_error) - np.mean(tmp_vals)))
+
+                            tmp_vals = np.abs(self.b_perp_perp)[::decimate]
+                            if energy:tmp_vals = tmp_vals **2
+                            plot_ax.scatter(tmp_vals, y_ax_data[::decimate], c='k', marker='o', cmap=None, norm=None, zorder=0, rasterized=True,alpha = 0.05)
+                            tmp_ind = error_bar_data[count]['perp_perp']
+                            tmp_ind['x_val'].append(np.mean(tmp_vals))
+                            tmp_ind['y_val'].append(np.mean(y_ax_data[::decimate]))
+                            tmp_ind['low_err'].append(np.abs(np.cos(ang-angle_error) - np.mean(tmp_vals)))
+                            tmp_ind['upper_err'].append(np.abs(np.cos(ang+angle_error) - np.mean(tmp_vals)))
+                    if inc_title: 
+                        if titles==None:
+                            plot_ax.set_title('Cluster {}'.format(count + 1))
+                        else:
+                            plot_ax.set_title('Cluster {}'.format(titles[count]))
                     count+=1
+        for count in range(len(ax)):
+            plot_ax = ax[count]
+            tmp_ind = error_bar_data[count]['par']
+            plot_ax.errorbar(tmp_ind['x_val'], tmp_ind['y_val'], xerr=[tmp_ind['upper_err'], tmp_ind['low_err']], fmt='.',ecolor='k', color='k')
+            if add_perp:
+                tmp_ind = error_bar_data[count]['combined']
+                plot_ax.errorbar(tmp_ind['x_val'], tmp_ind['y_val'], xerr=[tmp_ind['upper_err'], tmp_ind['low_err']], fmt='.',ecolor='g', color='g')
+            else:
+                tmp_ind = error_bar_data[count]['perp_surf']
+                plot_ax.errorbar(tmp_ind['x_val'], tmp_ind['y_val'], xerr=[tmp_ind['upper_err'], tmp_ind['low_err']], fmt='.',ecolor='g', color='g')
+                tmp_ind = error_bar_data[count]['perp_perp']
+                plot_ax.errorbar(tmp_ind['x_val'], tmp_ind['y_val'], xerr=[tmp_ind['upper_err'], tmp_ind['low_err']], fmt='.',ecolor='g', color='g')
         count = 0
         for cluster in cluster_list:
-            ax[count].plot(amps[cluster,:]/np.max(amps[cluster,:]), coil_numbers, 'xb-')
+            if plot_amps: ax[count].plot(amps[cluster,:]/np.max(amps[cluster,:]), coil_numbers, 'xb-')
+            
+            if plot_distance: 
+                vals = (self.hma.distance - np.min(self.hma.distance)) * 1./(np.max(self.hma.distance) - np.min(self.hma.distance))
+                ax[count].plot(1 - vals, coil_numbers, 'ok-')
             count+=1
         ax[0].set_xlim([0,1])
         if y_axis == None:
@@ -1240,6 +1344,7 @@ class clustering_object():
         for i in ax:i.grid(True)
         if pub_fig:
             xlab, ylab = ['Imag', 'Real'] if polar_plot else ['Normalised Amplitude','Coil Number']
+            if energy and not polar_plot: xlab = 'Energy (a.u)'
             for i in ax_unflat[:,0]: i.set_ylabel(ylab)
             for i in ax_unflat[-1,:]: i.set_xlabel(xlab)
             fig.subplots_adjust(hspace=0.3, wspace=0.15,left=0.05, bottom=0.05,top=0.95, right=0.95)

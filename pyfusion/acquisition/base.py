@@ -8,6 +8,7 @@ from pyfusion.conf.utils import import_setting, kwarg_config_handler, \
      get_config_as_dict, import_from_str
 from pyfusion.data.timeseries import Signal, Timebase, TimeseriesData
 from pyfusion.data.base import ChannelList
+import numpy as np
 
 class BaseAcquisition(object):
     """Base class for datasystem specific acquisition classes.
@@ -172,7 +173,7 @@ class MultiChannelFetcher(BaseDataFetcher):
         channel_list.sort()
         return [i[1] for i in channel_list]
     
-    def fetch(self):
+    def fetch(self, interp_if_diff = True):
         """Fetch each  channel and combine into  a multichannel instance
         of :py:class:`~pyfusion.data.timeseries.TimeseriesData`.
 
@@ -199,7 +200,10 @@ class MultiChannelFetcher(BaseDataFetcher):
                     assert_array_almost_equal(timebase, tmp_data.timebase)
                     data_list.append(tmp_data.signal)
                 except:
-                    raise
+                    if interp_if_diff:
+                        data_list.append(np.interp(timebase, tmp_data.timebase, tmp_data.signal))
+                    else:
+                        raise
         signal=Signal(data_list)
         output_data = TimeseriesData(signal=signal, timebase=timebase,
                                      channels=channels)
