@@ -311,7 +311,7 @@ def single_shot_svd_wrapper(input_data):
         #return single_shot_extraction(*input_data)
     #except Exception, e:
     except None:
-        print "!!!!!!!!!!!!!! EXCEPTION"
+        print "!!!!!!!!!!!!!! EXCEPTION svd"
         print input_data
         print e
         return [None,]
@@ -323,7 +323,7 @@ def single_shot_stft_wrapper(input_data):
 
     #except Exception, e:
     except None:
-        print "!!!!!!!!!!!!!! EXCEPTION"
+        print "!!!!!!!!!!!!!! EXCEPTION stft"
         print input_data
         print e
         return [None,]
@@ -331,7 +331,7 @@ def single_shot_stft_wrapper(input_data):
 
 
 def multi_extract(shot_selection,array_name, other_arrays = None, other_array_labels = None, meta_data = None,
-                  n_cpus=8, NFFT = 2048, overlap = 4, extraction_settings = None, method = 'svd'):
+                  n_cpus=8, NFFT = 2048, overlap = 4, extraction_settings = None, method = 'svd', start_times = None, end_times = None):
     '''Runs through all the shots in shot_selection other_arrays is a
     list of the other arrays you want to get information from '''
 
@@ -347,7 +347,18 @@ def multi_extract(shot_selection,array_name, other_arrays = None, other_array_la
         wrapper = single_shot_stft_wrapper
     else:
         raise ValueError('method is not a valid choice : choose svd, stft')
-    shot_list, start_times, end_times = H1_scan_list.return_scan_details(shot_selection) 
+
+    #Check to see if a shot list was provided
+    shot_list_nums = False
+    try:
+        for i in shot_selection:
+            tmp = int(i)
+        shot_list_nums = True
+        shot_list = shot_selection
+    except:
+        print('List of shots not provided, looking up data in H1_scan_list')
+    if not shot_list_nums:
+        shot_list, start_times, end_times = H1_scan_list.return_scan_details(shot_selection) 
     rep = itertools.repeat
     if other_arrays == None: other_arrays = ['ElectronDensity','H1ToroidalNakedCoil']
     if other_array_labels == None: other_array_labels = [['ne_static','ne_mode'],[None,'naked_coil']]
@@ -680,7 +691,9 @@ def single_shot(current_shot, array_names, NFFT, hop, n_pts, lower_freq, ax, sta
     mirnov_angles, misc_data_dict_cur = extract_data_by_picking_peaks(current_shot, array_names, NFFT=NFFT, hop=hop,n_pts=n_pts,lower_freq=lower_freq, ax = ax, time_window = [start_time, end_time])
     print 'hello'
     if perform_datamining:
-        z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, n_clusters = 16, n_iterations = 20)
+        #z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, n_clusters = 16, n_iterations = 20)
+        datamining_settings = {'n_clusters':16, 'n_iterations':20, 'start': 'k_means','verbose':0, 'method':'EM_VMM'}
+        z = perform_data_datamining(mirnov_angles, misc_data_dict_cur, datamining_settings)
         instance_array_cur, misc_data_dict_cur = filter_by_kappa_cutoff(z, ave_kappa_cutoff=ave_kappa_cutoff, ax = ax, cutoff_by = cutoff_by)
         return instance_array_cur, misc_data_dict_cur, z.cluster_details['EM_VMM_kappas']
     else:
@@ -693,9 +706,9 @@ def single_shot_wrapper(input_data):
     try:
         instance_array_cur, misc_data_dict_cur, kappa_array = single_shot(*input_data)
     except Exception, e:
-        print "!!!!!!!!!!!!!! EXCEPTION"
+        print "!!!!!!!!!!!!!! EXCEPTION in the single shot wrapper"
         print input_data
-        print e
+        print str(e)
         instance_array_cur = None
         misc_data_dict_cur = None
         kappa_array = None

@@ -363,14 +363,13 @@ class feature_object():
             print i, clust.settings
             
 
-        
 class clustering_object():
     '''Generic clustering_object, this will have the following
     attributes instance_array : array of phase differences
 
     SH : 6May2013 '''
 
-    def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None):
+    def mode_num_analysis(self, array = 'HMA', other_array = False, other_array_name = None, boozer_files_location='/home/srh112/code/python/h1_eq_generation/results_jason6/'):
         '''Supposed to fit a whole bunch of modes to the data for each cluster
         array can be one of HMA, PMA1, PMA2 or PMA1_reduced
 
@@ -383,6 +382,7 @@ class clustering_object():
         Requires the magnetics part of the h1 module for the probe details
         SRH: 7Sept2014
         '''
+        
         import h1.diagnostics.magnetics as mag
         if array == 'HMA':
             self.arr = mag.HMA()
@@ -414,7 +414,6 @@ class clustering_object():
         fig, ax = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         fig2, ax2 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
         fig3, ax3 = make_grid_subplots(n_clusters, sharex = True, sharey = True)
-        
         foo = self.feature_obj.misc_data_dict[other_array_name] if other_array else self.feature_obj.misc_data_dict['mirnov_data']
         #foo = self.feature_obj.misc_data_dict[other_array_name]
         foo = foo/np.abs(foo)
@@ -448,8 +447,7 @@ class clustering_object():
                     avail = np.array([0.33,0.37,0.44,0.63,0.69,0.83])
                     loc = np.argmin(np.abs(kh_ave_round - avail))
                     #filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh_ave_round, kh_ave_round)
-                    HOME = os.environ['HOME']
-                    filename  = HOME + '/code/python/h1_eq_generation/results_jason6/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(avail[loc], avail[loc])
+                    filename  = '{}/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(boozer_files_location, avail[loc], avail[loc])
                     print filename, kh_ave_round
                     self.arr.loc_boozer_coords(filename = filename)
                     self.coil_locs[array]['{:.3f}'.format(kh_ave_round)] = {}
@@ -471,6 +469,14 @@ class clustering_object():
                 ax3[cluster].plot(np.real(data), np.imag(data), 'r.')
                 for j in range(data.shape[0]): ax3[cluster].text(np.real(data[j]), np.imag(data[j]), str(j+1))
                 ax2[cluster].grid()
+
+        self.cluster_mode_fits['m'] = copy.deepcopy(self.arr.m_rec)
+        self.cluster_mode_fits['n'] = copy.deepcopy(self.arr.n_rec)
+        if not hasattr(self,'all_cluster_mode_fits'):
+            print('all_cluster_mode_fits does not exist, creating it')
+            self.all_cluster_mode_fits = {}
+        self.all_cluster_mode_fits[array] = copy.deepcopy(self.cluster_mode_fits)
+
         fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         ax[0].set_xlim([np.min(self.arr.m_rec), np.max(self.arr.m_rec)])
         ax[0].set_ylim([np.min(self.arr.n_rec), np.max(self.arr.n_rec)])
@@ -484,7 +490,6 @@ class clustering_object():
         ax3[0].set_ylim([-1, 1])
         fig3.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
         fig3.canvas.draw(); fig2.show()
-                
 
 
 
@@ -1098,7 +1103,7 @@ class clustering_object():
             fig.canvas.draw(); fig.show()
             return fig, ax
 
-    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None, inc_title = False, energy = False, plot_amps = False, plot_distance = False, titles = None, angle_error=10):
+    def plot_clusters_polarisations(self, coil_numbers = 0, cluster_list = None, ax = None, colours = None, scatter_kwargs = None, decimate = 1, polar_plot = False, y_axis = None, reference_phase = 'b_par', plot_circle = True, plot_center = True, plot_text = True, add_perp = True, noise_amp = 0.75, data_key = 'naked_coil', pub_fig = False, fig_name = None, inc_title = False, energy = False, plot_amps = False, plot_distance = False, angle_error = 10):
         '''
         Plot the cluster polarisations
         coil_numbers : list of probe formers to plot
@@ -1697,7 +1702,7 @@ class clusterer_wrapper(clustering_object):
 
     SH: 6May2013
     '''
-    def __init__(self, feature_obj, method='k-means',comment='', **kwargs):
+    def __init__(self, feature_obj, method='k_means',comment='', **kwargs):
         self.feature_obj = feature_obj
         #print 'kwargs', kwargs
         #Default settings are declared first, which are overwritten by kwargs
