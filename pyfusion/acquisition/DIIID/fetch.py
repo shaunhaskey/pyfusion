@@ -12,28 +12,26 @@ from pyfusion.conf.utils import import_setting, kwarg_config_handler, \
      get_config_as_dict, import_from_str
 
 class DIIIDDataFetcherPTdata(MDSPlusDataFetcher):
-    """Subclass of MDSplus fetcher to get additional H1-specific metadata."""
+    """Subclass of MDSplus fetcher to get DIII-D data from ptdata (i.e for magnetics)."""
     def setup(self):
         pass
-
     def do_fetch(self):
-        print(self.pointname)
-        print(self.shot)
+        print(self.shot, self.pointname)
         if not hasattr(self,'NC'):
             self.NC=None
-        if self.NC!=None:
+        if self.NC is not None:
             print(self.NC)
             t_name = '{}_time'.format(self.pointname)
             NC_vars = self.NC.variables.keys()
         else:
             NC_vars = []
         if self.pointname in NC_vars:
-            print('Pointname in NC cache, Reading...')
+            print('  Pointname in NC cache, Reading...')
             t_axis = self.NC.variables[t_name].data[:].copy()
             data = self.NC.variables[self.pointname].data[:].copy()
             self.write_cache = False
         else:
-            print('Fetching from ptdata')
+            print(' Fetching from ptdata')
             tmp = self.acq.connection.get('ptdata2("{}",{})'.format(self.pointname, self.shot))
             data = tmp.data()
             tmp = self.acq.connection.get('dim_of(ptdata2("{}",{}))'.format(self.pointname, self.shot))
@@ -41,15 +39,8 @@ class DIIIDDataFetcherPTdata(MDSPlusDataFetcher):
             self.write_cache = True
         coords = get_coords_for_channel(**self.__dict__)
         ch = Channel(self.pointname, coords)
-        # con=MDS.Connection('atlas.gat.com::')
-        # pointname = 'MPI66M067D'
-        # shot = 164950
-        # tmp = con.get('ptdata2("{}",{})'.format(pointname, shot))
-        # dat = tmp.data()
-        # tmp = con.get('dim_of(ptdata2("{}",{}))'.format(pointname, shot))
-        # t = tmp.data()
-        if self.NC!=None and self.write_cache:
-            print('Writing pointname to NC file')
+        if self.NC is not None and self.write_cache:
+            print(' Writing pointname to NC file')
             self.NC.createDimension(t_name, len(t_axis))
             f_time = self.NC.createVariable(t_name,'d',(t_name,))
             f_time[:] = +t_axis
@@ -60,6 +51,19 @@ class DIIIDDataFetcherPTdata(MDSPlusDataFetcher):
         output_data.config_name = ch
         self.fetch_mode = 'ptdata'
         return output_data
+
+class DIIIDDataFetcher(MDSPlusDataFetcher):
+    """Subclass of MDSplus fetcher to get DIII-D MDSplus data"""
+    def do_fetch(self):
+        print(self.shot, self.mds_path)
+        output_data = super(DIIIDDataFetcher, self).do_fetch()
+        coords = get_coords_for_channel(**self.__dict__)
+        ch = Channel(self.mds_path, coords)
+        output_data.channels = ch
+        output_data.meta.update({'shot':self.shot})
+        output_data.config_name = ch
+        return output_data
+
 
 class DIIIDMultiChannelFetcher(MultiChannelFetcher):
     """Fetch data from a diagnostic with multiple timeseries channels.
@@ -79,6 +83,9 @@ class DIIIDMultiChannelFetcher(MultiChannelFetcher):
     ``[Diagnostic:H1_mirnov_array_1_coil_1]``, etc)  which each return a
     single               channel               instance               of
     :py:class:`~pyfusion.data.timeseries.TimeseriesData`.
+
+    SRH: 16Sept2016:
+     This includes local caching in ~/tmp_pyfusion/
     """
     def fetch(self, interp_if_diff = True):
         """Fetch each  channel and combine into  a multichannel instance
@@ -86,7 +93,6 @@ class DIIIDMultiChannelFetcher(MultiChannelFetcher):
 
         :rtype: :py:class:`~pyfusion.data.timeseries.TimeseriesData`
         """
-        print('******** hello world ***********')
         ## initially, assume only single channel signals
         ordered_channel_names = self.ordered_channel_names()
         data_list = []
@@ -107,7 +113,7 @@ class DIIIDMultiChannelFetcher(MultiChannelFetcher):
                                      config_name=chan, NC=NC).fetch()
             channels.append(tmp_data.channels)
             meta_dict.update(tmp_data.meta)
-            if timebase == None:
+            if timebase is None:
                 timebase = tmp_data.timebase
                 data_list.append(tmp_data.signal)
             else:
