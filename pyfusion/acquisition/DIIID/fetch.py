@@ -19,18 +19,19 @@ class DIIIDDataFetcherPTdata(MDSPlusDataFetcher):
     def do_fetch(self):
         print(self.pointname)
         print(self.shot)
-
+        if not hasattr(self,'NC'):
+            self.NC=None
         if self.NC!=None:
             print(self.NC)
             t_name = '{}_time'.format(self.pointname)
             NC_vars = self.NC.variables.keys()
         else:
             NC_vars = []
-        print 'NC_vars',NC_vars
         if self.pointname in NC_vars:
             print('Pointname in NC cache, Reading...')
             t_axis = self.NC.variables[t_name].data[:].copy()
             data = self.NC.variables[self.pointname].data[:].copy()
+            self.write_cache = False
         else:
             print('Fetching from ptdata')
             tmp = self.acq.connection.get('ptdata2("{}",{})'.format(self.pointname, self.shot))
@@ -93,10 +94,11 @@ class DIIIDMultiChannelFetcher(MultiChannelFetcher):
         timebase = None
         meta_dict={}
         from scipy.io import netcdf
-        fname = '/u/haskeysr/tmp/{}.nc'.format(self.shot)
-        write_cache=False; read_cache=False
+        home = os.environ['HOME']
+        os.system('mkdir {}/tmp_pyfusion/'.format(home))
+        fname = '{}/tmp_pyfusion/{}.nc'.format(home,self.shot)
         if os.path.exists(fname):
-            NC = netcdf.netcdf_file(fname,'a',version=2)
+            NC = netcdf.netcdf_file(fname,'r',version=2)
         else:
             NC = netcdf.netcdf_file(fname,'w',version=2)
         for chan in ordered_channel_names:

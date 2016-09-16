@@ -998,6 +998,9 @@ class clustering_object():
         marker.extend(marker)
         if compare_dimensions ==None:
             dims = []
+
+            n_dimensions = self.feature_obj.instance_array.shape[1]
+            print 'n_dimensions',n_dimensions
             for dim in range(n_dimensions-1):
                 dims.append([dim, dim+1])
         else:
@@ -3077,7 +3080,7 @@ def generate_artificial_data(n_clusters, n_dimensions, n_instances, prob=None, m
     start_point = 0; end_point = 0
     for i in range(n_clusters):
         end_point = end_point + n_instances_per_clust[i]
-        for j in range(n_dimensions):
+        for j in range(self.n_dimensions):
             #input_data[start_point:end_point,j] = vonmises.rvs(variances[i,j],size=n_instances_per_clust[i],loc=means[i,j],scale=1)
             if method=='vonMises':
                 input_data[start_point:end_point,j] = vonmises.rvs(variances[i,j],size=n_instances_per_clust[i],loc=means[i,j],scale=1)

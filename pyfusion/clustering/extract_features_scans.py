@@ -655,6 +655,7 @@ def filter_by_kappa_cutoff(z, ave_kappa_cutoff=25, ax = None, prob_cutoff = None
         if ax!=None: ax.plot(z.feature_obj.misc_data_dict['time'][current],z.feature_obj.misc_data_dict['freq'][current],'k,') 
         include = 0
         if cutoff_by=='sigma_eq':
+            print std_eq, ave_kappa_cutoff
             if std_eq < ave_kappa_cutoff: include = 1
         elif cutoff_by=='sigma_bar':
             if std_bar < ave_kappa_cutoff: include = 1
